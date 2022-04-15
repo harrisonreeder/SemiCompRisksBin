@@ -15,3 +15,5 @@ LinkingTo:
     RcppArmadillo
 Imports: 
     Formula, splines2, survival, Rcpp
+URL: https://github.com/harrisonreeder/SemiCompRisksBin
+BugReports: https://github.com/harrisonreeder/SemiCompRisksBin/issues
