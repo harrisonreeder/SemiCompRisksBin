@@ -3,6 +3,7 @@
 export(Bayes_Logit)
 export(Bayes_SCR)
 export(Bayes_SCR_logit)
+export(Bayes_SCR_logit2)
 export(Bayes_Uni)
 export(simID_logit)
 import(Formula)

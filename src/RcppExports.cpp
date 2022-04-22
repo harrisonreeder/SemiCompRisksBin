@@ -106,6 +106,33 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// WeibSCRlogitmcmc2
+Rcpp::List WeibSCRlogitmcmc2(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::uvec& delta1D_sub, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, arma::mat& XmatD, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, int n_burnin, int n_sample, int thin);
+RcppExport SEXP _SemiCompRisksBin_WeibSCRlogitmcmc2(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP delta1D_subSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP XmatDSEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type y1(y1SEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y_sm(y_smSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type delta1(delta1SEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type delta1noD(delta1noDSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type delta_cr(delta_crSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type delta_sm(delta_smSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type delta1D_sub(delta1D_subSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Xmat1(Xmat1SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Xmat2(Xmat2SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Xmat3(Xmat3SEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type XmatD(XmatDSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type hyper_vec(hyper_vecSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type tuning_vec(tuning_vecSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type start_vec(start_vecSEXP);
+    Rcpp::traits::input_parameter< int >::type n_burnin(n_burninSEXP);
+    Rcpp::traits::input_parameter< int >::type n_sample(n_sampleSEXP);
+    Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
+    rcpp_result_gen = Rcpp::wrap(WeibSCRlogitmcmc2(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_SemiCompRisksBin_Logitmcmc_PG", (DL_FUNC) &_SemiCompRisksBin_Logitmcmc_PG, 8},
@@ -113,6 +140,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_SemiCompRisksBin_WeibUnimcmc", (DL_FUNC) &_SemiCompRisksBin_WeibUnimcmc, 9},
     {"_SemiCompRisksBin_WeibSCRmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRmcmc, 15},
     {"_SemiCompRisksBin_WeibSCRlogitmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc, 17},
+    {"_SemiCompRisksBin_WeibSCRlogitmcmc2", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc2, 17},
     {NULL, NULL, 0}
 };
 

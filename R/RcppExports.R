@@ -21,3 +21,7 @@ WeibSCRlogitmcmc <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, de
     .Call(`_SemiCompRisksBin_WeibSCRlogitmcmc`, y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin)
 }
 
+WeibSCRlogitmcmc2 <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin) {
+    .Call(`_SemiCompRisksBin_WeibSCRlogitmcmc2`, y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin)
+}
+

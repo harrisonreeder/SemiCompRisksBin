@@ -4,6 +4,8 @@
 #' @param x1,x2,x3,xD Covariate matrices with \code{n} rows.
 #' @param beta1.true,beta2.true,beta3.true,beta3tv.true,betaD.true,betaDtv.true Vectors of true regression parameter values.
 #'   The length of each vector should equal the number of columns in the corresponding covariate matrix.
+#' @param betaDfrail.true scalar for the coefficient of the shared frailty in the logit submodel.
+#' @param beta3tv.true,betaDtv.true Vectors of true regression parameter values for effects of T1 on the logit and h3 submodels.
 #' @param alpha1.true,alpha2.true,alpha3.true,kappa1.true,kappa2.true,kappa3.true Vectors of true baseline parameter values.
 #' @param theta.true True value for \eqn{\theta}.
 #' @param anyD Boolean for whether to allow any "immediate" terminal events
@@ -24,10 +26,11 @@
 #' @export
 simID_logit <- function(x1, x2, x3, xD=NULL,
                   beta1.true, beta2.true, beta3.true, beta3tv.true=NULL,
-                  betaD.true=NULL, betaDtv.true=NULL,
+                  betaD.true=NULL, betaDfrail.true=1, betaDtv.true=NULL,
                   alpha1.true, alpha2.true, alpha3.true,
                   kappa1.true, kappa2.true, kappa3.true,
-                  theta.true, h3tv_degree=3, anyD=TRUE, Dtv_degree=3,
+                  theta.true, h3tv_degree=3,
+                  anyD=TRUE, Dtv_degree=3,
                   frailty_type="gamma", cens) {
   # browser()
   n <- dim(x1)[1]
@@ -128,6 +131,7 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
   stopifnot(all((y1==pmin(R,Cen))[delta1==1]))
 
   if(anyD){
+    LPD <- LPD + betaDfrail.true * log(gamma.true)
     if(!is.null(betaDtv.true)){ #if we set total number of parameters to 0, then we have no time-varying component.
       pDtv <- length(betaDtv.true)
       if(Dtv_degree == "cs"){ #cubic spline model
@@ -154,7 +158,7 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
     }
 
     Dimmediate <- if(pD > 0 | pDtv > 0) stats::rbinom(n,size = 1,
-                                    prob = stats::plogis(q = LPD + log(gamma.true))) else numeric(n)
+                                    prob = stats::plogis(q = LPD)) else numeric(n)
     ind1D <- (delta1 & Dimmediate)
     y2[ind1D] <- y1[ind1D]
     delta2[ind1D] <- 0

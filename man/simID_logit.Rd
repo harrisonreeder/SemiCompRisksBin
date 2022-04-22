@@ -15,6 +15,7 @@ simID_logit(
   beta3.true,
   beta3tv.true = NULL,
   betaD.true = NULL,
+  betaDfrail.true = 1,
   betaDtv.true = NULL,
   alpha1.true,
   alpha2.true,
@@ -35,6 +36,10 @@ simID_logit(
 
 \item{beta1.true, beta2.true, beta3.true, beta3tv.true, betaD.true, betaDtv.true}{Vectors of true regression parameter values.
 The length of each vector should equal the number of columns in the corresponding covariate matrix.}
+
+\item{beta3tv.true, betaDtv.true}{Vectors of true regression parameter values for effects of T1 on the logit and h3 submodels.}
+
+\item{betaDfrail.true}{scalar for the coefficient of the shared frailty in the logit submodel.}
 
 \item{alpha1.true, alpha2.true, alpha3.true, kappa1.true, kappa2.true, kappa3.true}{Vectors of true baseline parameter values.}
 
