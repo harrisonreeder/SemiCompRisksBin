@@ -5,7 +5,8 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 
 void Logit_update_beta_frail(arma::vec& beta, arma::vec& eta, const arma::mat& Xmat,
-                             const arma::vec& frail, const arma::vec& mean_const,int& accept_beta){
+                             const arma::vec& frail, const arma::vec& mean_const,
+                             const arma::vec& P0diag, int& accept_beta){
 
   int n = Xmat.n_rows;
   int p = Xmat.n_cols;
@@ -13,6 +14,7 @@ void Logit_update_beta_frail(arma::vec& beta, arma::vec& eta, const arma::mat& X
   arma::vec omega = arma::ones(n);
   arma::vec beta_mean = arma::zeros(p);
   arma::mat beta_var = arma::eye(p,p);
+  arma::mat beta_prec = arma::eye(p,p);
 
   //draw auxiliary omega variables
   for(int i = 0; i < n; i++){
@@ -20,8 +22,11 @@ void Logit_update_beta_frail(arma::vec& beta, arma::vec& eta, const arma::mat& X
   }
 
   //compute mean and variance vectors for beta draw
-  beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega));
-  // beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega) + P0); //if we had a prior P0
+  beta_prec = Xmat.t() * (Xmat.each_col() % omega);
+  beta_prec.diag() = beta_prec.diag() + P0diag;
+  //beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega));
+  //beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega) + P0); //if we had a prior P0
+  beta_var = inv_sympd(beta_prec);
   beta_mean = beta_var * (mean_const - Xmat.t() * (omega % arma::log(frail)));
 
   //draw beta (inplace)
@@ -489,7 +494,8 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        const arma::vec &start_vec,
                        int n_burnin,
                        int n_sample,
-                       int thin){
+                       int thin,
+                       const std::string frail_path = ""){
 
   //I'm trying something new, which is explicitly passing in data as three sets
   //of vectors, corresponding with the three transitions...
@@ -597,8 +603,11 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
   arma::vec sample_kappa3 = arma::vec(n_store,arma::fill::zeros);
   arma::vec sample_alpha3 = arma::vec(n_store,arma::fill::zeros);
   arma::mat sample_beta3 = arma::mat(p3,n_store,arma::fill::zeros);
-  arma::mat sample_frail = arma::mat(n,n_store,arma::fill::zeros);
   arma::vec sample_theta = arma::vec(n_store,arma::fill::zeros);
+  arma::mat sample_frail;
+  if(frail_path.size() > 0){
+    sample_frail = arma::mat(n,n_store,arma::fill::zeros);
+  }
 
   int accept_kappa1 = 0;
   int accept_alpha1 = 0;
@@ -648,6 +657,10 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
                         - prob_frail;
 
   int move; //index for which parameter to update
+
+  // Rcpp::Rcout << "Path: " << frail_path << "\n" ;
+  // Rcpp::Rcout << "Length of path: " << frail_path.size() << "\n" ;
+
 
   //RUN MCMC
   newt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -746,7 +759,9 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
       sample_beta1.col(StoreInx - 1) = beta1;
       sample_beta2.col(StoreInx - 1) = beta2;
       sample_beta3.col(StoreInx - 1) = beta3;
-      sample_frail.col(StoreInx - 1) = frail;
+      if(frail_path.size() > 0){
+        sample_frail.col(StoreInx - 1) = frail;
+      }
     }
 
     if( ( (M+1) % 10000 ) == 0){
@@ -754,6 +769,11 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
       Rcpp::Rcout << "iteration: " << M+1 << ": " << ctime(&newt) << "\n";
       Rcpp::checkUserInterrupt(); //checks if the user hit the "stop" icon to cancel running sampler.
     }
+  }
+
+  if(frail_path.size() > 0){
+    // Rcpp::Rcout << "printing frailties to the address: " << frail_path << "\n" ;
+    sample_frail.save(frail_path, arma::csv_ascii);
   }
 
   return Rcpp::List::create(
@@ -767,8 +787,7 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
       Rcpp::Named("theta") = sample_theta,
       Rcpp::Named("beta1") = sample_beta1.t(),
       Rcpp::Named("beta2") = sample_beta2.t(),
-      Rcpp::Named("beta3") = sample_beta3.t(),
-      Rcpp::Named("gamma") = sample_frail.t()),
+      Rcpp::Named("beta3") = sample_beta3.t()),
     Rcpp::Named("accept") = Rcpp::List::create(
       Rcpp::Named("move") = move_vec,
       Rcpp::Named("alpha1") = accept_alpha1,
@@ -797,7 +816,8 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        const arma::vec &start_vec,
                        int n_burnin,
                        int n_sample,
-                       int thin){
+                       int thin,
+                       const std::string frail_path = ""){
 
   //I'm trying something new, which is explicitly passing in data as three sets
   //of vectors, corresponding with the three transitions...
@@ -831,6 +851,12 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   double kappa3_b = hyper_vec[11];
   double theta_a  = hyper_vec[12];
   double theta_b  = hyper_vec[13];
+  arma::vec m0 = hyper_vec(arma::span(14,13+pD));
+  arma::vec P0diag = hyper_vec(arma::span(14+pD,13+pD+pD));
+
+  // Rcpp::Rcout << "m0: " << m0 << "\n";
+  // Rcpp::Rcout << "P0diag: " << P0diag << "\n";
+
 
   //INITIALIZE TUNING PARAMETERS
   double mhProp_alpha1_var = tuning_vec[0];
@@ -936,7 +962,7 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   double delta1_sum = arma::accu(delta1);
   double delta_cr_sum = arma::accu(delta_cr);
   double delta_sm_sum = arma::accu( delta_sm );
-  arma::vec mean_const = XmatD.t() * (arma::conv_to<arma::vec>::from(delta1D_sub)-0.5); //+ P0 * m0; //if we had a prior
+  arma::vec mean_const = XmatD.t() * (arma::conv_to<arma::vec>::from(delta1D_sub)-0.5) + P0diag % m0;
   //keep running log-likelihoods for each submodel
   double curr_loglik1 = logLikWB_uni(y1, delta1, alpha1, kappa1, eta1, frail);
   double curr_loglik_cr = logLikWB_uni(y1, delta_cr, alpha2, kappa2, eta2, frail);
@@ -1053,7 +1079,7 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
     } else if(move==11){//betaD
       // Rcpp::Rcout << "updating betaD... " << "\n";
 
-      Logit_update_beta_frail(betaD, etaD, XmatD, frailD, mean_const, accept_betaD);
+      Logit_update_beta_frail(betaD, etaD, XmatD, frailD, mean_const, P0diag, accept_betaD);
 
       // Rcpp::Rcout << "updated betaD: " << betaD.t() << "\n";
     }
@@ -1073,7 +1099,9 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       sample_beta2.col(StoreInx - 1) = beta2;
       sample_beta3.col(StoreInx - 1) = beta3;
       sample_betaD.col(StoreInx - 1) = betaD;
-      sample_frail.col(StoreInx - 1) = frail;
+      if(frail_path.size() > 0){
+        sample_frail.col(StoreInx - 1) = frail;
+      }
     }
 
     if( ( (M+1) % 10000 ) == 0){
@@ -1082,6 +1110,12 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       Rcpp::checkUserInterrupt(); //checks if the user hit the "stop" icon to cancel running sampler.
     }
   }
+
+  if(frail_path.size() > 0){
+    // Rcpp::Rcout << "printing frailties to the address: " << frail_path << "\n" ;
+    sample_frail.save(frail_path, arma::csv_ascii);
+  }
+
 
   return Rcpp::List::create(
     Rcpp::Named("samples") = Rcpp::List::create(

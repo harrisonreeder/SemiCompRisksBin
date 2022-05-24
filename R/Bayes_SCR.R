@@ -8,13 +8,15 @@
 #' @param mcmcParams list of hyperparameters
 #' @param n_chains integer for number of chains to fit
 #' @param start_mat a matrix of start values, with each column corresponding to a chain. If null, n_chains sets number of chains
+#' @param frail_path a string path to a folder that will be created to write the gamma frailties to file
 #'
 #' @return a list with outputs
 #' @import Formula
 #' @export
 Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
-                      hyperParams, mcmcParams, n_chains, start_mat=NULL){
-  browser()
+                      hyperParams, mcmcParams, n_chains, start_mat=NULL,
+                      frail_path=NULL){
+  # browser()
 
   ##INITIALIZE DATA##
   ##*******************************##
@@ -94,6 +96,11 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
   if(n_store %% 1 != 0){ stop("numReps * burninPerc  must be divisible by thin")}
 
 
+  if(!is.null(frail_path)){
+    dir.create(paste(frail_path), recursive = TRUE, showWarnings = FALSE)
+  }
+
+
   ####ASSIGN START VALUES####
 
   if(is.null(start_mat)){
@@ -132,18 +139,29 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
   # #TODO: parallelize this loop (I know it can be done!)
   out_list <- list()
   # #generate an array to store the resulting samples
-  out_list[["samples"]] <- array(dim = c(n_store, n_chains, nrow(start_mat)),
+  out_list[["samples"]] <- array(dim = c(n_store, n_chains, 7 + p1 + p2 + p3),
                                  dimnames = list(as.character(1:n_store),
                                                  paste0("chain:",1:n_chains),
-                                                 rownames(start_mat)))
+                                                 rownames(start_mat)[1:(7 + p1 + p2 + p3)]))
   # out_list[["accept"]] <- list()
   mcmcRet <- list()
   for(i in 1:n_chains){
     print(paste0("Chain: ", i))
-    mcmcRet <- WeibSCRmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
-                                Xmat1, Xmat2, Xmat3,
-                                hyper_vec, tuning_vec, start_mat[,i],
-                                n_burnin, n_sample, thin)
+
+    if(!is.null(frail_path)){
+      frail_path_temp <- paste0(frail_path,"/frail_chain", i, ".csv")
+    } else{
+      frail_path_temp <- ""
+    }
+
+    mcmcRet <- WeibSCRmcmc(y1 = y1, y_sm = y_sm,
+                delta1 = delta1, delta1noD = delta1noD,
+                delta_cr = delta_cr, delta_sm = delta_sm,
+                Xmat1 = Xmat1, Xmat2 = Xmat2, Xmat3 = Xmat3,
+                hyper_vec = hyper_vec, tuning_vec = tuning_vec,
+                start_vec = start_mat[,i],
+                n_burnin = n_burnin, n_sample = n_sample, thin = thin,
+                frail_path = frail_path_temp)
 
     out_list[["samples"]][,i,1] <- mcmcRet[["samples"]][["kappa1"]]
     out_list[["samples"]][,i,2] <- mcmcRet[["samples"]][["alpha1"]]
@@ -155,7 +173,7 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
     if(p1>0) out_list[["samples"]][,i,8:(7+p1)] <- mcmcRet[["samples"]][["beta1"]]
     if(p2>0) out_list[["samples"]][,i,(8+p1):(7+p1+p2)] <- mcmcRet[["samples"]][["beta2"]]
     if(p3>0) out_list[["samples"]][,i,(8+p1+p2):(7+p1+p2+p3)] <- mcmcRet[["samples"]][["beta3"]]
-    out_list[["samples"]][,i,(8+p1+p2+p3):(7+p1+p2+p3+n)] <- mcmcRet[["samples"]][["gamma"]]
+#    out_list[["samples"]][,i,(8+p1+p2+p3):(7+p1+p2+p3+n)] <- mcmcRet[["samples"]][["gamma"]]
 
     out_list[["accept"]][[paste0("chain",i)]] <- mcmcRet$accept
 

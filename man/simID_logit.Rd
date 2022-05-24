@@ -13,10 +13,6 @@ simID_logit(
   beta1.true,
   beta2.true,
   beta3.true,
-  beta3tv.true = NULL,
-  betaD.true = NULL,
-  betaDfrail.true = 1,
-  betaDtv.true = NULL,
   alpha1.true,
   alpha2.true,
   alpha3.true,
@@ -24,32 +20,38 @@ simID_logit(
   kappa2.true,
   kappa3.true,
   theta.true,
+  frailty_type = "gamma",
+  beta2frail.true = 1,
+  beta3frail.true = 1,
+  betaDfrail.true = 1,
+  beta3tv.true = NULL,
   h3tv_degree = 3,
   anyD = TRUE,
+  betaD.true = NULL,
+  betaDtv.true = NULL,
   Dtv_degree = 3,
-  frailty_type = "gamma",
-  cens
+  cens = c(0, 0)
 )
 }
 \arguments{
 \item{x1, x2, x3, xD}{Covariate matrices with \code{n} rows.}
 
-\item{beta1.true, beta2.true, beta3.true, beta3tv.true, betaD.true, betaDtv.true}{Vectors of true regression parameter values.
+\item{beta1.true, beta2.true, beta3.true, betaD.true}{Vectors of true regression parameter values.
 The length of each vector should equal the number of columns in the corresponding covariate matrix.}
-
-\item{beta3tv.true, betaDtv.true}{Vectors of true regression parameter values for effects of T1 on the logit and h3 submodels.}
-
-\item{betaDfrail.true}{scalar for the coefficient of the shared frailty in the logit submodel.}
 
 \item{alpha1.true, alpha2.true, alpha3.true, kappa1.true, kappa2.true, kappa3.true}{Vectors of true baseline parameter values.}
 
 \item{theta.true}{True value for \eqn{\theta}.}
 
-\item{h3tv_degree, Dtv_degree}{either the string "cs" indicating restricted cubic spline, or an integer for degree of time-varying hazard/odds ratio basis. (0 is piecewise constant)}
+\item{frailty_type}{string denoting "gamma" for gamma-distributed frailty with variance \code{theta}, or "lognormal" for lognormal distributed frailty with log-frailty variance \code{theta}}
+
+\item{beta2frail.true, beta3frail.true, betaDfrail.true}{scalar for the coefficient of the shared frailty in the logit submodel.}
+
+\item{beta3tv.true, betaDtv.true}{Vectors of true regression parameter values for effects of T1 on the logit and h3 submodels.}
+
+\item{h3tv_degree, Dtv_degree}{either the string "cs" indicating restricted cubic spline, or an integer for degree of time-varying hazard/odds ratio B-spline basis. (0 is piecewise constant)}
 
 \item{anyD}{Boolean for whether to allow any "immediate" terminal events}
-
-\item{frailty_type}{string denoting "gamma" for gamma-distributed frailty with variance \code{theta}, or "lognormal" for lognormal distributed frailty with log-frailty variance \code{theta}}
 
 \item{cens}{A numeric vector of two elements. The right censoring times are generated from Uniform(\eqn{cens[1]}, \eqn{cens[2]}).}
 }

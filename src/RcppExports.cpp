@@ -55,8 +55,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // WeibSCRmcmc
-Rcpp::List WeibSCRmcmc(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, int n_burnin, int n_sample, int thin);
-RcppExport SEXP _SemiCompRisksBin_WeibSCRmcmc(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP) {
+Rcpp::List WeibSCRmcmc(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, int n_burnin, int n_sample, int thin, const std::string frail_path);
+RcppExport SEXP _SemiCompRisksBin_WeibSCRmcmc(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP, SEXP frail_pathSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -75,13 +75,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_burnin(n_burninSEXP);
     Rcpp::traits::input_parameter< int >::type n_sample(n_sampleSEXP);
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
-    rcpp_result_gen = Rcpp::wrap(WeibSCRmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, Xmat1, Xmat2, Xmat3, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin));
+    Rcpp::traits::input_parameter< const std::string >::type frail_path(frail_pathSEXP);
+    rcpp_result_gen = Rcpp::wrap(WeibSCRmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, Xmat1, Xmat2, Xmat3, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin, frail_path));
     return rcpp_result_gen;
 END_RCPP
 }
 // WeibSCRlogitmcmc
-Rcpp::List WeibSCRlogitmcmc(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::uvec& delta1D_sub, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, const arma::mat& XmatD, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, int n_burnin, int n_sample, int thin);
-RcppExport SEXP _SemiCompRisksBin_WeibSCRlogitmcmc(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP delta1D_subSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP XmatDSEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP) {
+Rcpp::List WeibSCRlogitmcmc(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::uvec& delta1D_sub, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, const arma::mat& XmatD, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, int n_burnin, int n_sample, int thin, const std::string frail_path);
+RcppExport SEXP _SemiCompRisksBin_WeibSCRlogitmcmc(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP delta1D_subSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP XmatDSEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP, SEXP frail_pathSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -102,7 +103,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_burnin(n_burninSEXP);
     Rcpp::traits::input_parameter< int >::type n_sample(n_sampleSEXP);
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
-    rcpp_result_gen = Rcpp::wrap(WeibSCRlogitmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin));
+    Rcpp::traits::input_parameter< const std::string >::type frail_path(frail_pathSEXP);
+    rcpp_result_gen = Rcpp::wrap(WeibSCRlogitmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin, frail_path));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -138,8 +140,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_SemiCompRisksBin_Logitmcmc_PG", (DL_FUNC) &_SemiCompRisksBin_Logitmcmc_PG, 8},
     {"_SemiCompRisksBin_rpg1z_devroye", (DL_FUNC) &_SemiCompRisksBin_rpg1z_devroye, 1},
     {"_SemiCompRisksBin_WeibUnimcmc", (DL_FUNC) &_SemiCompRisksBin_WeibUnimcmc, 9},
-    {"_SemiCompRisksBin_WeibSCRmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRmcmc, 15},
-    {"_SemiCompRisksBin_WeibSCRlogitmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc, 17},
+    {"_SemiCompRisksBin_WeibSCRmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRmcmc, 16},
+    {"_SemiCompRisksBin_WeibSCRlogitmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc, 18},
     {"_SemiCompRisksBin_WeibSCRlogitmcmc2", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc2, 17},
     {NULL, NULL, 0}
 };

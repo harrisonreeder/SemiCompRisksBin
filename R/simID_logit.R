@@ -2,14 +2,14 @@
 #'   risks data under semi-Markov Weibull models with logit submodel for immediate terminal event.
 #'
 #' @param x1,x2,x3,xD Covariate matrices with \code{n} rows.
-#' @param beta1.true,beta2.true,beta3.true,beta3tv.true,betaD.true,betaDtv.true Vectors of true regression parameter values.
+#' @param beta1.true,beta2.true,beta3.true,betaD.true Vectors of true regression parameter values.
 #'   The length of each vector should equal the number of columns in the corresponding covariate matrix.
-#' @param betaDfrail.true scalar for the coefficient of the shared frailty in the logit submodel.
+#' @param beta2frail.true,beta3frail.true,betaDfrail.true scalar for the coefficient of the shared frailty in the logit submodel.
 #' @param beta3tv.true,betaDtv.true Vectors of true regression parameter values for effects of T1 on the logit and h3 submodels.
 #' @param alpha1.true,alpha2.true,alpha3.true,kappa1.true,kappa2.true,kappa3.true Vectors of true baseline parameter values.
 #' @param theta.true True value for \eqn{\theta}.
 #' @param anyD Boolean for whether to allow any "immediate" terminal events
-#' @param h3tv_degree,Dtv_degree either the string "cs" indicating restricted cubic spline, or an integer for degree of time-varying hazard/odds ratio basis. (0 is piecewise constant)
+#' @param h3tv_degree,Dtv_degree either the string "cs" indicating restricted cubic spline, or an integer for degree of time-varying hazard/odds ratio B-spline basis. (0 is piecewise constant)
 #' @param frailty_type string denoting "gamma" for gamma-distributed frailty with variance \code{theta}, or "lognormal" for lognormal distributed frailty with log-frailty variance \code{theta}
 #' @param cens A numeric vector of two elements. The right censoring times are generated from Uniform(\eqn{cens[1]}, \eqn{cens[2]}).
 #'
@@ -25,20 +25,27 @@
 #'
 #' @export
 simID_logit <- function(x1, x2, x3, xD=NULL,
-                  beta1.true, beta2.true, beta3.true, beta3tv.true=NULL,
-                  betaD.true=NULL, betaDfrail.true=1, betaDtv.true=NULL,
+                  beta1.true, beta2.true, beta3.true,
                   alpha1.true, alpha2.true, alpha3.true,
                   kappa1.true, kappa2.true, kappa3.true,
-                  theta.true, h3tv_degree=3,
-                  anyD=TRUE, Dtv_degree=3,
-                  frailty_type="gamma", cens) {
+
+                  theta.true, frailty_type="gamma",
+                  beta2frail.true=1, beta3frail.true=1, betaDfrail.true=1,
+
+                  beta3tv.true=NULL, h3tv_degree=3,
+
+                  anyD=TRUE, betaD.true=NULL,
+                  betaDtv.true=NULL, Dtv_degree=3,
+
+                  cens = c(0,0)) {
   # browser()
   n <- dim(x1)[1]
   p1 <- dim(x1)[2]
   p2 <- dim(x2)[2]
   p3 <- dim(x3)[2]
-  if(!is.null(xD)){
+  if(anyD==TRUE & !is.null(xD)){
     pD <- dim(xD)[2]
+    stopifnot(pD == length(betaD.true))
   } else{
     pD <- 0
   }
@@ -55,22 +62,40 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
 
   LP1	<- if(p1>0) as.vector(beta1.true %*% t(x1)) else 0
   LP2	<- if(p2>0) as.vector(beta2.true %*% t(x2)) else 0
-  LP3	<- if(p3>0) as.vector(beta3.true %*% t(x3)) else 0
+  LP3	<- if(p3>0) as.vector(beta3.true %*% t(x3)) else numeric(n) #made a vector bc it is subset automatically by yesR below
   LPD	<- if(pD>0) as.vector(betaD.true %*% t(xD)) else 0
 
   Rind <- NULL
   R <- stats::rweibull(n, shape = alpha1.true, scale = exp(-(log(kappa1.true) +
                                                         LP1 + log(gamma.true))/alpha1.true))
   D <- stats::rweibull(n, shape = alpha2.true, scale = exp(-(log(kappa2.true) +
-                                                        LP2 + log(gamma.true))/alpha2.true))
+                                                        LP2 + beta2frail.true * log(gamma.true))/alpha2.true))
   yesR <- R < D
-  Cen <- stats::runif(n, cens[1], cens[2])
+  if(cens[2] == 0){
+    Cen <- rep(Inf,n)
+  } else{
+    Cen <- stats::runif(n, cens[1], cens[2])
+  }
 
 
   #now, incorporate a possibly time-varying component into LP3
   if(!is.null(beta3tv.true)){ #if we set total number of parameters to 0, then we have no time-varying component.
     p3tv <- length(beta3tv.true)
-    if(h3tv_degree == "cs"){ #cubic spline model
+    if(h3tv_degree == "linear"){ #linear
+      stopifnot(p3tv==1)
+      x3tv <- as.matrix(pmin(R,D,Cen))
+      colnames(x3tv) <- paste0("h3tv",1)
+      LP3 <- LP3 + x3tv %*% beta3tv.true
+      h3_knots <- c(0,Inf)
+
+    } else if(h3tv_degree == "log1p") {
+      stopifnot(p3tv==1)
+      x3tv <- as.matrix(log1p(pmin(R,D,Cen)))
+      colnames(x3tv) <- paste0("h3tv",1)
+      LP3 <- LP3 + x3tv %*% beta3tv.true
+      h3_knots <- c(0,Inf)
+
+    } else if(h3tv_degree == "cs"){ #cubic spline model
       #in cubic spline model, boundary knots are set directly at min/max endpoints,
       #so no need to fix at 0
       h3_quantile_seq <- seq(from = 0,to = 1, length.out = p3tv+1)
@@ -79,6 +104,7 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
                           Boundary.knots = h3_knots[c(1,length(h3_knots))],
                           intercept = FALSE)
     } else { #if we don't use restricted cubic, then we are using a regular b-spline with specified degree
+      h3tv_degree <- as.numeric(h3tv_degree)
       stopifnot(p3tv>=h3tv_degree)
       h3_quantile_seq <- seq(from = 0,to = 1, length.out = p3tv+2-h3tv_degree)[-c(1,p3tv+2-h3tv_degree)]
       #fixing piecewise endpoint at maximum is ok, because splines2 prediction will extrapolate beyond it
@@ -94,9 +120,9 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
     p3tv <- 0
   }
 
-
   D[yesR] <- R[yesR] + stats::rweibull(sum(yesR), shape = alpha3.true,
-                                scale = exp(-(log(kappa3.true) + LP3[yesR] + log(gamma.true[yesR]))/alpha3.true))
+                          scale = exp(-(log(kappa3.true) + LP3[yesR] +
+                                          beta3frail.true * log(gamma.true[yesR]))/alpha3.true))
   delta1 <- rep(NA, n)
   delta2 <- rep(NA, n)
   y1 <- R
@@ -134,7 +160,21 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
     LPD <- LPD + betaDfrail.true * log(gamma.true)
     if(!is.null(betaDtv.true)){ #if we set total number of parameters to 0, then we have no time-varying component.
       pDtv <- length(betaDtv.true)
-      if(Dtv_degree == "cs"){ #cubic spline model
+      if(Dtv_degree == "linear"){ #linear
+        stopifnot(pDtv==1)
+        xDtv <- as.matrix(y1)
+        colnames(xDtv) <- paste0("xDtv",1)
+        LPD <- LPD + (xDtv %*% betaDtv.true)
+        Dtv_knots <- c(0,Inf)
+
+      } else if(Dtv_degree == "log1p") {
+        stopifnot(pDtv==1)
+        xDtv <- as.matrix(log1p(y1))
+        colnames(xDtv) <- paste0("xDtv",1)
+        LPD <- LPD + (xDtv %*% betaDtv.true)
+        Dtv_knots <- c(0,Inf)
+
+      } else if(Dtv_degree == "cs"){ #cubic spline model
         #in cubic spline model, boundary knots are set directly at min/max endpoints,
         #so no need to fix at 0
         Dtv_quantile_seq <- seq(from = 0,to = 1, length.out = pDtv+1)
@@ -143,6 +183,7 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
                             Boundary.knots = Dtv_knots[c(1,length(Dtv_knots))],
                             intercept = FALSE)
       } else { #if we don't use restricted cubic, then we are using a regular b-spline with specified degree
+        Dtv_degree <- as.numeric(Dtv_degree)
         stopifnot(pDtv>=Dtv_degree)
         Dtv_quantile_seq <- seq(from = 0,to = 1, length.out = pDtv+2-Dtv_degree)[-c(1,pDtv+2-Dtv_degree)]
         #fixing piecewise endpoint at maximum is ok, because splines2 prediction will extrapolate beyond it
@@ -163,6 +204,8 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
     y2[ind1D] <- y1[ind1D]
     delta2[ind1D] <- 0
     deltaD <- as.numeric(ind1D)
+  } else{
+    pDtv <- 0
   }
 
   # #there are no differences between the spline used, and that used
@@ -185,7 +228,7 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
     attr(ret,which = "h3tv_knots") <- h3_knots
   }
 
-  if(!is.null(betaDtv.true)){
+  if(anyD & !is.null(betaDtv.true)){
     attr(ret,which = "pDtv") <- pDtv
     attr(ret,which = "Dtv_degree") <- Dtv_degree
     attr(ret,which = "Dtv_knots") <- Dtv_knots

@@ -12,7 +12,8 @@ Bayes_SCR_logit(
   hyperParams,
   mcmcParams,
   n_chains,
-  start_mat = NULL
+  start_mat = NULL,
+  frail_path = NULL
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ Bayes_SCR_logit(
 \item{n_chains}{integer for number of chains to fit}
 
 \item{start_mat}{a matrix of start values, with each column corresponding to a chain. If null, n_chains sets number of chains}
+
+\item{frail_path}{filepath for where to write frailty output}
 }
 \value{
 a list with outputs

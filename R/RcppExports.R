@@ -13,12 +13,12 @@ WeibUnimcmc <- function(y, delta, Xmat, hyper_vec, tuning_vec, start_vec, n_burn
     .Call(`_SemiCompRisksBin_WeibUnimcmc`, y, delta, Xmat, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin)
 }
 
-WeibSCRmcmc <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, Xmat1, Xmat2, Xmat3, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin) {
-    .Call(`_SemiCompRisksBin_WeibSCRmcmc`, y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, Xmat1, Xmat2, Xmat3, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin)
+WeibSCRmcmc <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, Xmat1, Xmat2, Xmat3, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin, frail_path = "") {
+    .Call(`_SemiCompRisksBin_WeibSCRmcmc`, y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, Xmat1, Xmat2, Xmat3, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin, frail_path)
 }
 
-WeibSCRlogitmcmc <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin) {
-    .Call(`_SemiCompRisksBin_WeibSCRlogitmcmc`, y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin)
+WeibSCRlogitmcmc <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin, frail_path = "") {
+    .Call(`_SemiCompRisksBin_WeibSCRlogitmcmc`, y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin, frail_path)
 }
 
 WeibSCRlogitmcmc2 <- function(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, n_burnin, n_sample, thin) {

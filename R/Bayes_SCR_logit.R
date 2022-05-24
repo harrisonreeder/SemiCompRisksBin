@@ -8,12 +8,15 @@
 #' @param mcmcParams list of hyperparameters
 #' @param n_chains integer for number of chains to fit
 #' @param start_mat a matrix of start values, with each column corresponding to a chain. If null, n_chains sets number of chains
+#' @param frail_path filepath for where to write frailty output
+#'
 #'
 #' @return a list with outputs
 #' @import Formula
 #' @export
 Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
-                      hyperParams, mcmcParams, n_chains, start_mat=NULL){
+                      hyperParams, mcmcParams, n_chains, start_mat=NULL,
+                      frail_path=NULL){
   browser()
 
   ##INITIALIZE DATA##
@@ -93,7 +96,7 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   ####SET HYPERPARAMETERS####
   hyper_vec <- as.vector(c(hyperParams$WB$WB.ab1, hyperParams$WB$WB.ab2, hyperParams$WB$WB.ab3,
                            hyperParams$WB$WB.cd1, hyperParams$WB$WB.cd2, hyperParams$WB$WB.cd3,
-                           hyperParams$theta))
+                           hyperParams$theta,hyperParams$logit$logit.m0,hyperParams$logit$logit.P0diag))
   tuning_vec <- as.vector(c(mhProp_alpha1_var=mcmcParams$tuning$mhProp_alphag_var[1],
                             mhProp_alpha2_var=mcmcParams$tuning$mhProp_alphag_var[2],
                             mhProp_alpha3_var=mcmcParams$tuning$mhProp_alphag_var[3],
@@ -110,6 +113,11 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   stopifnot(n_burnin %% 1 == 0)
   stopifnot(n_sample > 0)
   if(n_store %% 1 != 0){ stop("numReps * burninPerc  must be divisible by thin")}
+
+
+  if(!is.null(frail_path)){
+    dir.create(paste(frail_path), recursive = TRUE, showWarnings = FALSE)
+  }
 
 
   ####ASSIGN START VALUES####
@@ -152,23 +160,31 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   # #TODO: parallelize this loop (I know it can be done!)
   out_list <- list()
   # #generate an array to store the resulting samples
-  out_list[["samples"]] <- array(dim = c(n_store, n_chains, nrow(start_mat)),
+  out_list[["samples"]] <- array(dim = c(n_store, n_chains, 7 + p1 + p2 + p3 + pD),
                                  dimnames = list(as.character(1:n_store),
                                                  paste0("chain:",1:n_chains),
-                                                 rownames(start_mat)))
+                                                 rownames(start_mat)[1:(7 + p1 + p2 + p3 + pD)]))
   # out_list[["accept"]] <- list()
   mcmcRet <- list()
   for(i in 1:n_chains){
     print(paste0("Chain: ", i))
-    mcmcRet <- WeibSCRlogitmcmc(y1, y_sm,
-                                delta1, #indicator for nonterminal event followed by immediate death
-                                delta1noD, #indicator for nonterminal event not followed by immediate death
-                                delta_cr, #terminal first event indicator
-                                delta_sm, #terminal event indicator in group with nonterminal first event and no immediate terminal
-                                delta1D_sub, #immediate terminal event indicator in group with nonterminal first event
-                                Xmat1, Xmat2, Xmat3, XmatD,
-                                hyper_vec, tuning_vec, start_mat[,i],
-                                n_burnin, n_sample, thin)
+
+    if(!is.null(frail_path)){
+      frail_path_temp <- paste0(frail_path,"/frail_chain", i, ".csv")
+    } else{
+      frail_path_temp <- ""
+    }
+
+    mcmcRet <- WeibSCRlogitmcmc(y1=y1, y_sm=y_sm,
+                                delta1=delta1, #indicator for nonterminal event followed by immediate death
+                                delta1noD=delta1noD, #indicator for nonterminal event not followed by immediate death
+                                delta_cr=delta_cr, #terminal first event indicator
+                                delta_sm=delta_sm, #terminal event indicator in group with nonterminal first event and no immediate terminal
+                                delta1D_sub=delta1D_sub, #immediate terminal event indicator in group with nonterminal first event
+                                Xmat1=Xmat1, Xmat2=Xmat2, Xmat3=Xmat3, XmatD=XmatD,
+                                hyper_vec=hyper_vec, tuning_vec=tuning_vec, start_vec=start_mat[,i],
+                                n_burnin=n_burnin, n_sample=n_sample, thin=thin,
+                                frail_path = frail_path_temp)
 
     out_list[["samples"]][,i,1] <- mcmcRet[["samples"]][["kappa1"]]
     out_list[["samples"]][,i,2] <- mcmcRet[["samples"]][["alpha1"]]
@@ -181,7 +197,7 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     if(p2>0) out_list[["samples"]][,i,(8+p1):(7+p1+p2)] <- mcmcRet[["samples"]][["beta2"]]
     if(p3>0) out_list[["samples"]][,i,(8+p1+p2):(7+p1+p2+p3)] <- mcmcRet[["samples"]][["beta3"]]
     if(pD>0) out_list[["samples"]][,i,(8+p1+p2+p3):(7+p1+p2+p3+pD)] <- mcmcRet[["samples"]][["betaD"]]
-    out_list[["samples"]][,i,(8+p1+p2+p3+pD):(7+p1+p2+p3+pD+n)] <- mcmcRet[["samples"]][["gamma"]]
+    # out_list[["samples"]][,i,(8+p1+p2+p3+pD):(7+p1+p2+p3+pD+n)] <- mcmcRet[["samples"]][["gamma"]]
 
     out_list[["accept"]][[paste0("chain",i)]] <- mcmcRet$accept
 
