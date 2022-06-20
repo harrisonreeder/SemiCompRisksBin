@@ -17,7 +17,7 @@
 Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                       hyperParams, mcmcParams, n_chains, start_mat=NULL,
                       frail_path=NULL){
-  browser()
+  # browser()
 
   ##INITIALIZE DATA##
   ##*******************************##
@@ -66,6 +66,8 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   #death indicator among those who have non-terminal event without immediate death
   delta_sm <- time2[[2]][delta1noD==1]
 
+  ymax <- max(time2[[1]])
+
   #ensure that number of obs in h3 is correctly accounted for
   stopifnot(length(y_sm) == sum(delta1noD))
 
@@ -79,7 +81,7 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   Xmat3 <- as.matrix(stats::model.frame(stats::formula(form2, lhs=0, rhs=3),
                                         data=data))[delta1noD==1,,drop=FALSE]
   #subsetted to just those who experience the non-terminal event, INTERCEPT ADDED
-  XmatD <- cbind(rep(1,sum(delta1)),
+  XmatD <- cbind(logit_intercept=rep(1,sum(delta1)),
                  as.matrix(stats::model.frame(stats::formula(form2, lhs=0, rhs=4),
                                         data=data))[delta1==1,,drop=FALSE])
   p1 <- ncol(Xmat1)
@@ -92,11 +94,13 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   # survreg(formula = Surv(y1,delta_cr) ~ Xmat2)
   # survreg(formula = Surv(y_sm,delta_sm) ~ Xmat3)
 
-
   ####SET HYPERPARAMETERS####
   hyper_vec <- as.vector(c(hyperParams$WB$WB.ab1, hyperParams$WB$WB.ab2, hyperParams$WB$WB.ab3,
                            hyperParams$WB$WB.cd1, hyperParams$WB$WB.cd2, hyperParams$WB$WB.cd3,
-                           hyperParams$theta,hyperParams$logit$logit.m0,hyperParams$logit$logit.P0diag))
+                           hyperParams$theta,
+                           if(is.null(hyperParams$logit$logit.m0)) numeric(pD) else hyperParams$logit$logit.m0,
+                           if(is.null(hyperParams$logit$logit.P0diag)) numeric(pD) else hyperParams$logit$logit.P0diag
+                           ))
   tuning_vec <- as.vector(c(mhProp_alpha1_var=mcmcParams$tuning$mhProp_alphag_var[1],
                             mhProp_alpha2_var=mcmcParams$tuning$mhProp_alphag_var[2],
                             mhProp_alpha3_var=mcmcParams$tuning$mhProp_alphag_var[3],
@@ -157,15 +161,38 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                              paste0("gamma",1:n))
   }
 
+
+  out_list <- list(
+    #generate an array to store the resulting samples
+    samples = array(dim = c(n_store, n_chains, 7 + p1 + p2 + p3 + pD),
+                    dimnames = list(as.character(1:n_store),
+                                    paste0("chain:",1:n_chains),
+                                    rownames(start_mat)[1:(7 + p1 + p2 + p3 + pD)])),
+    covnames = list(covNames1= if(p1 > 0) colnames(Xmat1) else NULL,
+                    covNames2= if(p2 > 0) colnames(Xmat2) else NULL,
+                    covNames3= if(p3 > 0) colnames(Xmat3) else NULL,
+                    covNamesD= if(pD > 1) colnames(XmatD[,-1,drop=FALSE]) else NULL),
+    #list final characteristics useful to export
+    setup = list(Formula=Formula,
+                 frailty=TRUE,
+                 nCov0 = c(2,2,2),
+                 nCov = c(p1,p2,p3,pD),
+                 hyper_vec = hyper_vec, start_mat = start_mat,
+                 tuning_vec = tuning_vec,
+                 #nGam_save,
+                 numReps = numReps, thin = thin, ymax=ymax,
+                 path = frail_path, burninPerc = burninPerc,
+                 hz.type = "Weibull", model = "semi-Markov", nChain = n_chains,
+                 mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin)), #slight duplication but that's ok
+    #empty list to keep "accept" values in.
+    accept = vector(mode = "list", length = n_chains),
+    DIC = NA,
+    LPML = NA,
+    class = c("Bayes_HReg2", "IDlogit", "Ind", "WB")
+  )
+  names(out_list$accept) <- paste0("chain",1:n_chains)
+
   # #TODO: parallelize this loop (I know it can be done!)
-  out_list <- list()
-  # #generate an array to store the resulting samples
-  out_list[["samples"]] <- array(dim = c(n_store, n_chains, 7 + p1 + p2 + p3 + pD),
-                                 dimnames = list(as.character(1:n_store),
-                                                 paste0("chain:",1:n_chains),
-                                                 rownames(start_mat)[1:(7 + p1 + p2 + p3 + pD)]))
-  # out_list[["accept"]] <- list()
-  mcmcRet <- list()
   for(i in 1:n_chains){
     print(paste0("Chain: ", i))
 
@@ -198,20 +225,11 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     if(p3>0) out_list[["samples"]][,i,(8+p1+p2):(7+p1+p2+p3)] <- mcmcRet[["samples"]][["beta3"]]
     if(pD>0) out_list[["samples"]][,i,(8+p1+p2+p3):(7+p1+p2+p3+pD)] <- mcmcRet[["samples"]][["betaD"]]
     # out_list[["samples"]][,i,(8+p1+p2+p3+pD):(7+p1+p2+p3+pD+n)] <- mcmcRet[["samples"]][["gamma"]]
-
     out_list[["accept"]][[paste0("chain",i)]] <- mcmcRet$accept
-
   }
 
-  #for now, my plan is going to be to leverage the bayesplot package to
-  #make visuals
-
-  out_list[["setup"]]	<-
-    # mcmcRet[["setup"]]	<-
-    list(start_mat = start_mat,
-         mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin))
-
-  # return(mcmcRet)
+  class(out_list) <- "Bayes_HReg2"
+  #for now, my plan is going to be to leverage the bayesplot package to make visuals
   return(out_list)
 
 }

@@ -85,10 +85,19 @@ Bayes_Uni <- function(Formula, data, na.action="na.fail", subset=NULL,
 
   out_list[["setup"]]	<-
     # mcmcRet[["setup"]]	<-
-    list(start_mat = start_mat,
+    list(Formula=Formula,
+         nCov0 = 2,
+         nCov = p,
+         hyper_vec = hyper_vec, start_mat = start_mat,
+         tuning_vec = tuning_vec, ymax = max(y),
+         numReps = numReps, thin = thin, burninPerc = burninPerc,
+         hz.type = "Weibull", nChain = n_chains,
          mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin))
+  out_list$class <- c("Bayes_HReg2", "Surv", "Ind", "WB")
+  out_list$covnames <- if(p>0) colnames(Xmat) else NULL
 
   # return(mcmcRet)
+  class(out_list) <- "Bayes_HReg2"
   return(out_list)
 
 }

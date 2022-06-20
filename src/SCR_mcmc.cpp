@@ -973,23 +973,71 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   if(p2 > 0) numUpdate += 1;
   if(p3 > 0) numUpdate += 1;
   if(pD > 0) numUpdate += 1;
-  double prob_beta1 = (p1 > 0) ? (double) 1/numUpdate : 0;
-  double prob_beta2 = (p2 > 0) ? (double) 1/numUpdate : 0;
-  double prob_beta3 = (p3 > 0) ? (double) 1/numUpdate : 0;
-  double prob_betaD = (pD > 0) ? (double) 1/numUpdate : 0;
-  double prob_kappa1 = (double) 1/numUpdate;
-  double prob_kappa2 = (double) 1/numUpdate;
-  double prob_kappa3 = (double) 1/numUpdate;
-  double prob_alpha1 = (double) 1/numUpdate;
-  double prob_alpha2 = (double) 1/numUpdate;
-  double prob_alpha3 = (double) 1/numUpdate;
-  double prob_frail  = (double) 1/numUpdate;
-  double prob_theta = 1 - prob_beta1 - prob_beta2 - prob_beta3 - prob_betaD
-    - prob_kappa1 - prob_kappa2 - prob_kappa3
-    - prob_alpha1 - prob_alpha2 - prob_alpha3
-    - prob_frail;
 
-  int move; //index for which parameter to update
+  // double prob_beta1 = (p1 > 0) ? (double) 1/numUpdate : 0;
+  // double prob_beta2 = (p2 > 0) ? (double) 1/numUpdate : 0;
+  // double prob_beta3 = (p3 > 0) ? (double) 1/numUpdate : 0;
+  // double prob_betaD = (pD > 0) ? (double) 1/numUpdate : 0;
+  // double prob_kappa1 = (double) 1/numUpdate;
+  // double prob_kappa2 = (double) 1/numUpdate;
+  // double prob_kappa3 = (double) 1/numUpdate;
+  // double prob_alpha1 = (double) 1/numUpdate;
+  // double prob_alpha2 = (double) 1/numUpdate;
+  // double prob_alpha3 = (double) 1/numUpdate;
+  // double prob_frail  = (double) 1/numUpdate;
+  // double prob_theta = 1 - prob_beta1 - prob_beta2 - prob_beta3 - prob_betaD
+  //   - prob_kappa1 - prob_kappa2 - prob_kappa3
+  //   - prob_alpha1 - prob_alpha2 - prob_alpha3
+  //   - prob_frail;
+
+  //how about this:
+  //about 0.2 is devoted to betas
+  //at least 0.45 is devoted to theta + frailties
+  //at least 0.35 is devoted to baseline params
+
+  double total_betas = p1 + p2 + p3;
+  if(pD > 0){
+    total_betas = total_betas + 1;
+  }
+  //I'm going to reweight the sampling scheme to oversample theta
+  double prob_beta1 = (p1 > 0) ? (double) 0.2 * p1 / total_betas : 0;
+  double prob_beta2 = (p2 > 0) ? (double) 0.2 * p2 / total_betas : 0;
+  double prob_beta3 = (p3 > 0) ? (double) 0.2 * p3 / total_betas : 0;
+  double prob_betaD = (pD > 0) ? (double) 0.2 * 1 / total_betas : 0; //smallest bc updates in a block
+  double prob_remaining = 1 - prob_beta1 - prob_beta2 - prob_beta3 - prob_betaD;
+
+  //now, just divide up "proportions" of the remaining probability.
+  double prob_kappa1 = 0.5 / 6 * prob_remaining;
+  double prob_kappa2 = 0.5 / 6 * prob_remaining;
+  double prob_kappa3 = 0.5 / 6 * prob_remaining;
+  double prob_alpha1 = 0.5 / 6 * prob_remaining;
+  double prob_alpha2 = 0.5 / 6 * prob_remaining;
+  double prob_alpha3 = 0.5 / 6 * prob_remaining;
+  double prob_frail  = 0.15 * prob_remaining;
+  double prob_theta =  0.35 * prob_remaining;
+  arma::vec probs = {prob_kappa1,prob_kappa2,prob_kappa3,
+                     prob_alpha1,prob_alpha2,prob_alpha3,
+                     prob_frail,prob_theta,
+                     prob_beta1,prob_beta2,prob_beta3,prob_betaD};
+  arma::vec cumprobs = arma::cumsum(probs);
+
+  Rcpp::Rcout << "Sampling Probabilities:" << "\n"
+              << "prob_beta1: \t" << prob_beta1 << "\n"
+              << "prob_beta2: \t" << prob_beta2 << "\n"
+              << "prob_beta3: \t" << prob_beta3 << "\n"
+              << "prob_betaD: \t" << prob_betaD << "\n"
+              << "prob_alpha1: \t" << prob_alpha1 << "\n"
+              << "prob_kappa1: \t" << prob_kappa1 << "\n"
+              << "prob_alpha2: \t" << prob_alpha2 << "\n"
+              << "prob_kappa2: \t" << prob_kappa2 << "\n"
+              << "prob_alpha3: \t" << prob_alpha3 << "\n"
+              << "prob_kappa3: \t" << prob_kappa3 << "\n"
+              << "prob_frail: \t" << prob_frail << "\n"
+              << "prob_theta: \t" << prob_theta << "\n";
+
+
+  double move_unit; //random number on the interval (0,1) deciding what to sample
+  //int move; //index for which parameter to update
 
   //RUN MCMC
   newt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -1000,44 +1048,60 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   for(int M = 0; M < n_iter; ++M){
     // Rcpp::Rcout << "iteration: " << M << "\n";
 
-    move = (int) R::runif(0, numUpdate);
-    move_vec(M) = move;
+    move_unit = R::unif_rand();
+    //move = (int) R::runif(0, numUpdate);
+    //move_vec(M) = move;
 
     //KAPPA updates
-    if(move==0){ //kappa1
+    if(move_unit < cumprobs[0]){ // kappa1
+    //if(move==0){ //kappa1
+    move_vec(M) = 0;
       Bweib_update_kappa(eta1, alpha1, kappa1, frail, y1,
                          delta1, delta1_sum, kappa1_a, kappa1_b,
                          accept_kappa1, curr_loglik1);
 
       // Rcpp::Rcout << "updated kappa1: " << kappa1 << "\n";
-    } else if(move==1){ //kappa2
+    } else if(move_unit < cumprobs[1]){ //kappa2
+    //} else if(move==1){ //kappa2
+      move_vec(M) = 1;
       Bweib_update_kappa(eta2, alpha2, kappa2, frail, y1,
                          delta_cr, delta_cr_sum, kappa2_a, kappa2_b,
                          accept_kappa2, curr_loglik_cr);
 
       // Rcpp::Rcout << "updated kappa2: " << kappa2 << "\n";
-    } else if(move==2){ //kappa3
+    } else if(move_unit < cumprobs[2]){ //kappa3
+    // } else if(move==2){ //kappa3
+      move_vec(M) = 2;
       Bweib_update_kappa(eta3, alpha3, kappa3, frail_sm, y_sm,
                          delta_sm, delta_sm_sum, kappa3_a, kappa3_b,
                          accept_kappa3, curr_loglik_sm);
       // Rcpp::Rcout << "updated kappa3: " << kappa3 << "\n";
-    } else if(move==3){ //alpha1
-      //ALPHA updates (in-place)
+    } else if(move_unit < cumprobs[3]){ //alpha1
+    // } else if(move==3){ //alpha1
+      move_vec(M) = 3;
       Bweib_update_alpha(eta1, alpha1, kappa1, frail,    y1,   delta1,
                          mhProp_alpha1_var, alpha1_a, alpha1_b,
                          accept_alpha1, curr_loglik1);
       // Rcpp::Rcout << "updated alpha1: " << alpha1 << "\n";
-    } else if(move==4){ //alpha2
+    } else if(move_unit < cumprobs[4]){ //alpha2
+    // } else if(move==4){ //alpha2
+      move_vec(M) = 4;
       Bweib_update_alpha(eta2, alpha2, kappa2, frail,    y1,   delta_cr,
                          mhProp_alpha2_var, alpha2_a, alpha2_b,
                          accept_alpha2, curr_loglik_cr);
       // Rcpp::Rcout << "updated alpha2: " << alpha2 << "\n";
-    } else if(move==5){ //alpha3
+    } else if(move_unit < cumprobs[5]){ //alpha3
+    // } else if(move==5){ //alpha3
+      move_vec(M) = 5;
       Bweib_update_alpha(eta3, alpha3, kappa3, frail_sm, y_sm, delta_sm,
                          mhProp_alpha3_var, alpha3_a, alpha3_b,
                          accept_alpha3, curr_loglik_sm);
       // Rcpp::Rcout << "updated alpha3: " << alpha3 << "\n";
-    } else if(move==6){ //frailties
+    } else if(move_unit < cumprobs[6]){ //frailties
+    // } else if(move==6){ //frailties
+      move_vec(M) = 6;
+
+
       // Rcpp::Rcout << "updating frailties... " << "\n";
 
       //This is the update for gamma-distributed frailties
@@ -1046,6 +1110,7 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       //                               y1, y_sm, sm_ind, sm_ind_long,
       //                               delta1, delta_cr, delta_sm, accept_frail,
       //                               curr_loglik1, curr_loglik_cr, curr_loglik_sm);
+
 
       //This is the update for lognormal-distributed frailties
       BweibScrSMlogit_update_frail_ln(frail, frail_sm, frailD, theta, eta1, eta2, eta3, etaD,
@@ -1056,7 +1121,10 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                                       curr_loglik1, curr_loglik_cr, curr_loglik_sm);
 
       // Rcpp::Rcout << "updated frail: " << frail(arma::span(0,10)) << "\n";
-    } else if(move==7){ //theta (frailty variance)
+    } else if(move_unit < cumprobs[7]){ //theta (frailty variance)
+    // } else if(move==7){ //theta (frailty variance)
+      move_vec(M) = 7;
+
       //This is update for gamma-distributed frailty variance
       //BweibScrSM_update_theta_gamma(theta, frail, mhProp_theta_var, theta_a, theta_b, accept_theta);
 
@@ -1064,19 +1132,29 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       BweibScrSM_update_theta_ln(theta, frail, theta_a, theta_b, accept_theta);
 
       // Rcpp::Rcout << "updated theta: " << theta << "\n";
-    } else if(move==8){//beta1
+    } else if(move_unit < cumprobs[8]){ //beta1
+    // } else if(move==8){//beta1
+      move_vec(M) = 8;
+
       Bweib_update_betaj(beta1, eta1, alpha1, kappa1, frail, y1, delta1,
                          Xmat1, accept_beta1, curr_loglik1);
       // Rcpp::Rcout << "updated beta1: " << beta1.t() << "\n";
-    } else if(move==9){//beta2
+    } else if(move_unit < cumprobs[9]){ //beta2
+    // } else if(move==9){//beta2
+      move_vec(M) = 9;
       Bweib_update_betaj(beta2, eta2, alpha2, kappa2, frail, y1, delta_cr,
                          Xmat2, accept_beta2, curr_loglik_cr);
       // Rcpp::Rcout << "updated beta2: " << beta2.t() << "\n";
-    } else if(move==10){//beta3
+    } else if(move_unit < cumprobs[10]){ //beta3
+    // } else if(move==10){//beta3
+      move_vec(M) = 10;
       Bweib_update_betaj(beta3, eta3, alpha3, kappa3, frail_sm, y_sm, delta_sm,
                          Xmat3, accept_beta3, curr_loglik_sm);
       // Rcpp::Rcout << "updated beta3: " << beta3.t() << "\n";
-    } else if(move==11){//betaD
+    } else { //betaD
+    // } else if(move==11){//betaD
+      move_vec(M) = 11;
+
       // Rcpp::Rcout << "updating betaD... " << "\n";
 
       Logit_update_beta_frail(betaD, etaD, XmatD, frailD, mean_const, P0diag, accept_betaD);
@@ -1147,6 +1225,21 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
         Rcpp::Named("gamma") = accept_frail));
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
