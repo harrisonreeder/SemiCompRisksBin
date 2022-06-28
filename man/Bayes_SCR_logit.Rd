@@ -13,6 +13,7 @@ Bayes_SCR_logit(
   mcmcParams,
   n_chains,
   start_mat = NULL,
+  frailty = TRUE,
   frail_path = NULL
 )
 }

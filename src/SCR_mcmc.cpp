@@ -474,6 +474,44 @@ void BweibScrSMlogit_update_frail_ln(arma::vec &frail, arma::vec &frail_sm, arma
   curr_loglik_sm = logLikWB_uni(y_sm, delta_sm, alpha3, kappa3, eta3, frail_sm);
 }
 
+//function to just compute the likelihood contributions of every subject in place
+
+void BweibScrSMlogit_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
+                               const arma::vec &eta1, const arma::vec &eta2,
+                               const arma::vec &eta3, const arma::vec &etaD,
+                               const double &kappa1, const double &alpha1,
+                               const double &kappa2, const double &alpha2,
+                               const double &kappa3, const double &alpha3,
+                               const arma::vec &y1, const arma::vec &y_sm,
+                               const arma::uvec &delta1, const arma::uvec &delta1noD,
+                               const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                               const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long){
+  int n = y1.n_rows;
+  double logliki;
+  for(int i = 0; i < n; i++){
+    logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), frail(i))
+      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
+    if(delta1(i)>0){ //nonterminal event has occurred
+      //I'm writing binary log-likelihood contribution as in
+      //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
+      logliki += -log1p( exp(etaD(delta1_ind_long(i)) + log(frail(i))) );
+      if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
+        logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
+                                       alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
+      } else{ //then non-terminal event has occurred followed by immediate death
+        //etaD cancels out from these, so just add the log-frailties
+        logliki += log(frail(i));
+      }
+    }
+    //update ith contribution
+    logLH_vec(i) = logliki;
+  }
+}
+
+
+
+
+
 
 
 
@@ -816,7 +854,7 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        const arma::vec &start_vec,
                        int n_burnin,
                        int n_sample,
-                       int thin,
+                       int thin, int frail_ind,
                        const std::string frail_path = ""){
 
   //I'm trying something new, which is explicitly passing in data as three sets
@@ -849,25 +887,25 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   double kappa2_b = hyper_vec[9];
   double kappa3_a = hyper_vec[10];
   double kappa3_b = hyper_vec[11];
+
+  //for now, I'm going to assume that the hyperparameters have inputs here
+  //even if a frailty is not ultimately included. Then the indexing doesn't get jammed up.
   double theta_a  = hyper_vec[12];
   double theta_b  = hyper_vec[13];
+
   arma::vec m0 = hyper_vec(arma::span(14,13+pD));
   arma::vec P0diag = hyper_vec(arma::span(14+pD,13+pD+pD));
-
-  // Rcpp::Rcout << "m0: " << m0 << "\n";
-  // Rcpp::Rcout << "P0diag: " << P0diag << "\n";
-
 
   //INITIALIZE TUNING PARAMETERS
   double mhProp_alpha1_var = tuning_vec[0];
   double mhProp_alpha2_var = tuning_vec[1];
   double mhProp_alpha3_var = tuning_vec[2];
-  double mhProp_theta_var  = tuning_vec[3];
 
+  //again, assume these exist
+  double mhProp_theta_var  = tuning_vec[3];
   double frail_prop_var = 0.3;
 
   // Rcpp::Rcout << "finished setting MCMC tuning params" << "\n";
-
 
   //INITIALIZE STARTING VALUES
   double kappa1=start_vec(0);
@@ -876,7 +914,10 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   double alpha2=start_vec(3);
   double kappa3=start_vec(4);
   double alpha3=start_vec(5);
+
+  //again, assume that there's a start value for theta
   double theta=start_vec(6);
+
   arma::vec beta1, beta2, beta3, betaD;
   arma::vec eta1(n,arma::fill::zeros);
   arma::vec eta2(n,arma::fill::zeros);
@@ -899,10 +940,8 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
     etaD = XmatD * betaD;
   }
 
+  //again, assume that these exist.
   arma::vec frail = start_vec(arma::span(7+p1+p2+p3+pD,6+p1+p2+p3+pD+n));
-  //test model with fixed frailties, verify that that is working ok!
-  // arma::vec frail = arma::ones(n);
-  // theta=0.5;
 
   //grab subset of frails corresponding with risk of immediate death
   arma::uvec delta1_ind = arma::find( delta1 );
@@ -937,9 +976,19 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   arma::vec sample_kappa3 = arma::vec(n_store,arma::fill::zeros);
   arma::vec sample_alpha3 = arma::vec(n_store,arma::fill::zeros);
   arma::mat sample_beta3 = arma::mat(p3,n_store,arma::fill::zeros);
-  arma::mat sample_frail = arma::mat(n,n_store,arma::fill::zeros);
   arma::vec sample_theta = arma::vec(n_store,arma::fill::zeros);
   arma::mat sample_betaD = arma::mat(pD,n_store,arma::fill::zeros);
+  arma::mat sample_frail;
+  if(frail_path.size() > 0){
+    sample_frail = arma::mat(n,n_store,arma::fill::zeros);
+  }
+
+  //structures to store running likelihood contributions
+  //eventually could store individual contributions for use with loo, but might be too big.
+  arma::vec logLH_vec = arma::vec(n,arma::fill::zeros);
+  arma::vec LH_mean_vec = arma::vec(n,arma::fill::zeros);
+  arma::vec invLH_mean_vec = arma::vec(n,arma::fill::zeros);
+  arma::vec sample_logLH = arma::vec(n_store,arma::fill::zeros);
 
   int accept_kappa1 = 0;
   int accept_alpha1 = 0;
@@ -968,7 +1017,8 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   double curr_loglik_cr = logLikWB_uni(y1, delta_cr, alpha2, kappa2, eta2, frail);
   double curr_loglik_sm = logLikWB_uni(y_sm, delta_sm, alpha3, kappa3, eta3, frail_sm);
 
-  int numUpdate = 8; //3 kappas, 3 alphas, theta and frailties
+  int numUpdate = 6; //3 kappas, 3 alphas
+  if(frail_ind > 0) numUpdate += 2; //update theta and frailties
   if(p1 > 0) numUpdate += 1;
   if(p2 > 0) numUpdate += 1;
   if(p3 > 0) numUpdate += 1;
@@ -1006,15 +1056,17 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   double prob_betaD = (pD > 0) ? (double) 0.2 * 1 / total_betas : 0; //smallest bc updates in a block
   double prob_remaining = 1 - prob_beta1 - prob_beta2 - prob_beta3 - prob_betaD;
 
+  double prob_frail = (frail_ind > 0) ? (double) 0.15 * prob_remaining : 0;
+  double prob_theta = (frail_ind > 0) ? (double) 0.35 * prob_remaining : 0;
+  prob_remaining = prob_remaining - prob_theta - prob_frail;
+
   //now, just divide up "proportions" of the remaining probability.
-  double prob_kappa1 = 0.5 / 6 * prob_remaining;
-  double prob_kappa2 = 0.5 / 6 * prob_remaining;
-  double prob_kappa3 = 0.5 / 6 * prob_remaining;
-  double prob_alpha1 = 0.5 / 6 * prob_remaining;
-  double prob_alpha2 = 0.5 / 6 * prob_remaining;
-  double prob_alpha3 = 0.5 / 6 * prob_remaining;
-  double prob_frail  = 0.15 * prob_remaining;
-  double prob_theta =  0.35 * prob_remaining;
+  double prob_kappa1 = (double) prob_remaining / 6;
+  double prob_kappa2 = (double) prob_remaining / 6;
+  double prob_kappa3 = (double) prob_remaining / 6;
+  double prob_alpha1 = (double) prob_remaining / 6;
+  double prob_alpha2 = (double) prob_remaining / 6;
+  double prob_alpha3 = (double) prob_remaining / 6;
   arma::vec probs = {prob_kappa1,prob_kappa2,prob_kappa3,
                      prob_alpha1,prob_alpha2,prob_alpha3,
                      prob_frail,prob_theta,
@@ -1172,14 +1224,28 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       sample_kappa1(StoreInx - 1) = kappa1;
       sample_kappa2(StoreInx - 1) = kappa2;
       sample_kappa3(StoreInx - 1) = kappa3;
-      sample_theta(StoreInx - 1) = theta;
+      if(frail_ind>0){
+        sample_theta(StoreInx - 1) = theta;
+      }
       sample_beta1.col(StoreInx - 1) = beta1;
       sample_beta2.col(StoreInx - 1) = beta2;
       sample_beta3.col(StoreInx - 1) = beta3;
       sample_betaD.col(StoreInx - 1) = betaD;
-      if(frail_path.size() > 0){
+      if(frail_ind>0 && frail_path.size() > 0){
         sample_frail.col(StoreInx - 1) = frail;
       }
+
+      //deviance information
+      BweibScrSMlogit_logLH_vec(logLH_vec, frail, eta1, eta2, eta3, etaD,
+                                kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
+                                y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                                sm_ind_long, delta1_ind_long);
+
+      //store overall log likelihood sample
+      sample_logLH(StoreInx - 1) = arma::accu(logLH_vec);
+      //update running mean likelihood contributions
+      LH_mean_vec = ((StoreInx - 1) * LH_mean_vec + arma::exp(logLH_vec)) / StoreInx;
+      invLH_mean_vec = ((StoreInx - 1) * invLH_mean_vec + arma::exp(-logLH_vec)) / StoreInx;
     }
 
     if( ( (M+1) % 10000 ) == 0){
@@ -1194,7 +1260,6 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
     sample_frail.save(frail_path, arma::csv_ascii);
   }
 
-
   return Rcpp::List::create(
     Rcpp::Named("samples") = Rcpp::List::create(
       Rcpp::Named("alpha1") = sample_alpha1,
@@ -1208,7 +1273,9 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       Rcpp::Named("beta2") = sample_beta2.t(),
       Rcpp::Named("beta3") = sample_beta3.t(),
       Rcpp::Named("betaD") = sample_betaD.t(),
-      Rcpp::Named("gamma") = sample_frail.t()),
+      Rcpp::Named("logLH") = sample_logLH,
+      Rcpp::Named("LH_mean_vec") = LH_mean_vec,
+      Rcpp::Named("invLH_mean_vec") = invLH_mean_vec),
       Rcpp::Named("accept") = Rcpp::List::create(
         Rcpp::Named("move") = move_vec,
         Rcpp::Named("alpha1") = accept_alpha1,
@@ -1223,19 +1290,7 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
         Rcpp::Named("beta3") = accept_beta3,
         Rcpp::Named("betaD") = accept_betaD,
         Rcpp::Named("gamma") = accept_frail));
-
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
