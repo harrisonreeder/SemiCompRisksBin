@@ -70,7 +70,7 @@ double logLikWB_uni_i(const double& yi, const int& deltai,
 void Bweib_update_betaj(arma::vec& beta, arma::vec& eta,
                          double &alpha, double &kappa, const arma::vec& frail,
                          const arma::vec& y, const arma::uvec& delta,
-                         const arma::mat& Xmat, arma::uvec &accept_beta, double &curr_loglik){
+                         const arma::mat& Xmat, arma::vec &accept_beta, double &curr_loglik){
 
   int p = Xmat.n_cols;
   int j = (int) R::runif(0, p);
@@ -193,7 +193,7 @@ Rcpp::List WeibUnimcmc(const arma::vec &y, const arma::uvec &delta,
 
   int accept_kappa = 0;
   int accept_alpha = 0;
-  arma::uvec accept_beta = arma::uvec(p,arma::fill::zeros);
+  arma::vec accept_beta = arma::vec(p,arma::fill::zeros);
 
   int StoreInx=0; //index for where to store a sample, post-thinning
 
@@ -654,9 +654,9 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
   int accept_kappa3 = 0;
   int accept_alpha3 = 0;
   int accept_theta = 0;
-  arma::uvec accept_beta1 = arma::uvec(p1,arma::fill::zeros);
-  arma::uvec accept_beta2 = arma::uvec(p2,arma::fill::zeros);
-  arma::uvec accept_beta3 = arma::uvec(p3,arma::fill::zeros);
+  arma::vec accept_beta1 = arma::vec(p1,arma::fill::zeros);
+  arma::vec accept_beta2 = arma::vec(p2,arma::fill::zeros);
+  arma::vec accept_beta3 = arma::vec(p3,arma::fill::zeros);
 
   arma::vec accept_frail = arma::vec(n,arma::fill::zeros);
   //int accept_frail = 0;
@@ -844,7 +844,7 @@ Rcpp::List WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
 
 // [[Rcpp::export]]
-Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
+void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        const arma::uvec &delta1, const arma::uvec &delta1noD, const arma::uvec &delta_cr,
                        const arma::uvec &delta_sm, const arma::uvec &delta1D_sub,
                        const arma::mat &Xmat1, const arma::mat &Xmat2,
@@ -852,10 +852,30 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        const arma::vec &hyper_vec,
                        const arma::vec &tuning_vec,
                        const arma::vec &start_vec,
-                       int n_burnin,
-                       int n_sample,
-                       int thin, int frail_ind,
-                       const std::string frail_path = ""){
+                       arma::vec &sample_alpha1,
+                       arma::vec &sample_alpha2,
+                       arma::vec &sample_alpha3,
+                       arma::vec &sample_kappa1,
+                       arma::vec &sample_kappa2,
+                       arma::vec &sample_kappa3,
+                       arma::mat &sample_beta1,
+                       arma::mat &sample_beta2,
+                       arma::mat &sample_beta3,
+                       arma::mat &sample_betaD,
+                       arma::mat &sample_frail,
+                       arma::vec &sample_theta,
+                       arma::vec &accept_base,
+                       arma::vec &accept_frail,
+                       arma::vec &accept_beta1,
+                       arma::vec &accept_beta2,
+                       arma::vec &accept_beta3,
+                       arma::vec &LH_mean_vec,
+                       arma::vec &invLH_mean_vec,
+                       arma::vec &sample_logLH,
+                       arma::mat &sample_logLHi,
+                       arma::vec &move_vec,
+                       int n_burnin, int n_sample, int thin, int frail_ind,
+                       int nGam_save, int nlogLHi_save){
 
   //I'm trying something new, which is explicitly passing in data as three sets
   //of vectors, corresponding with the three transitions...
@@ -965,31 +985,10 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   // Rcpp::Rcout << "nrow delta1_ind " << delta1_ind.n_rows << "\n";
   // Rcpp::Rcout << "nrow sm_ind " << sm_ind.n_rows << "\n";
 
-
-  //CREATE STORAGE VECTORS/MATRICES FOR SAMPLING
-  arma::vec sample_kappa1 = arma::vec(n_store,arma::fill::zeros);
-  arma::vec sample_alpha1 = arma::vec(n_store,arma::fill::zeros);
-  arma::mat sample_beta1 = arma::mat(p1,n_store,arma::fill::zeros);
-  arma::vec sample_kappa2 = arma::vec(n_store,arma::fill::zeros);
-  arma::vec sample_alpha2 = arma::vec(n_store,arma::fill::zeros);
-  arma::mat sample_beta2 = arma::mat(p2,n_store,arma::fill::zeros);
-  arma::vec sample_kappa3 = arma::vec(n_store,arma::fill::zeros);
-  arma::vec sample_alpha3 = arma::vec(n_store,arma::fill::zeros);
-  arma::mat sample_beta3 = arma::mat(p3,n_store,arma::fill::zeros);
-  arma::vec sample_theta = arma::vec(n_store,arma::fill::zeros);
-  arma::mat sample_betaD = arma::mat(pD,n_store,arma::fill::zeros);
-  arma::mat sample_frail;
-  if(frail_path.size() > 0){
-    sample_frail = arma::mat(n,n_store,arma::fill::zeros);
-  }
-
   //structures to store running likelihood contributions
-  //eventually could store individual contributions for use with loo, but might be too big.
   arma::vec logLH_vec = arma::vec(n,arma::fill::zeros);
-  arma::vec LH_mean_vec = arma::vec(n,arma::fill::zeros);
-  arma::vec invLH_mean_vec = arma::vec(n,arma::fill::zeros);
-  arma::vec sample_logLH = arma::vec(n_store,arma::fill::zeros);
 
+  //temporary storage of MH acceptance counts
   int accept_kappa1 = 0;
   int accept_alpha1 = 0;
   int accept_kappa2 = 0;
@@ -998,12 +997,6 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   int accept_alpha3 = 0;
   int accept_theta = 0;
   int accept_betaD = 0; //because all logit betas are updated at once
-  arma::uvec accept_beta1 = arma::uvec(p1,arma::fill::zeros);
-  arma::uvec accept_beta2 = arma::uvec(p2,arma::fill::zeros);
-  arma::uvec accept_beta3 = arma::uvec(p3,arma::fill::zeros);
-
-  arma::vec accept_frail = arma::vec(n,arma::fill::zeros);
-  //int accept_frail = 0;
 
   int StoreInx=0; //index for where to store a sample, post-thinning
 
@@ -1073,40 +1066,33 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                      prob_beta1,prob_beta2,prob_beta3,prob_betaD};
   arma::vec cumprobs = arma::cumsum(probs);
 
-  Rcpp::Rcout << "Sampling Probabilities:" << "\n"
-              << "prob_beta1: \t" << prob_beta1 << "\n"
-              << "prob_beta2: \t" << prob_beta2 << "\n"
-              << "prob_beta3: \t" << prob_beta3 << "\n"
-              << "prob_betaD: \t" << prob_betaD << "\n"
-              << "prob_alpha1: \t" << prob_alpha1 << "\n"
-              << "prob_kappa1: \t" << prob_kappa1 << "\n"
-              << "prob_alpha2: \t" << prob_alpha2 << "\n"
-              << "prob_kappa2: \t" << prob_kappa2 << "\n"
-              << "prob_alpha3: \t" << prob_alpha3 << "\n"
-              << "prob_kappa3: \t" << prob_kappa3 << "\n"
-              << "prob_frail: \t" << prob_frail << "\n"
-              << "prob_theta: \t" << prob_theta << "\n";
+  // Rcpp::Rcout << "Sampling Probabilities:" << "\n"
+  //             << "prob_beta1: \t" << prob_beta1 << "\n"
+  //             << "prob_beta2: \t" << prob_beta2 << "\n"
+  //             << "prob_beta3: \t" << prob_beta3 << "\n"
+  //             << "prob_betaD: \t" << prob_betaD << "\n"
+  //             << "prob_alpha1: \t" << prob_alpha1 << "\n"
+  //             << "prob_kappa1: \t" << prob_kappa1 << "\n"
+  //             << "prob_alpha2: \t" << prob_alpha2 << "\n"
+  //             << "prob_kappa2: \t" << prob_kappa2 << "\n"
+  //             << "prob_alpha3: \t" << prob_alpha3 << "\n"
+  //             << "prob_kappa3: \t" << prob_kappa3 << "\n"
+  //             << "prob_frail: \t" << prob_frail << "\n"
+  //             << "prob_theta: \t" << prob_theta << "\n";
 
 
   double move_unit; //random number on the interval (0,1) deciding what to sample
-  //int move; //index for which parameter to update
 
   //RUN MCMC
   newt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
   Rcpp::Rcout << "Begin MCMC: " << ctime(&newt) << "\n";
-
-  // Rcpp::Rcout << "begin mcmc" << "\n";
-  arma::uvec move_vec = arma::uvec(n_iter,arma::fill::zeros);
   for(int M = 0; M < n_iter; ++M){
     // Rcpp::Rcout << "iteration: " << M << "\n";
 
     move_unit = R::unif_rand();
-    //move = (int) R::runif(0, numUpdate);
-    //move_vec(M) = move;
 
     //KAPPA updates
     if(move_unit < cumprobs[0]){ // kappa1
-    //if(move==0){ //kappa1
     move_vec(M) = 0;
       Bweib_update_kappa(eta1, alpha1, kappa1, frail, y1,
                          delta1, delta1_sum, kappa1_a, kappa1_b,
@@ -1114,7 +1100,6 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
       // Rcpp::Rcout << "updated kappa1: " << kappa1 << "\n";
     } else if(move_unit < cumprobs[1]){ //kappa2
-    //} else if(move==1){ //kappa2
       move_vec(M) = 1;
       Bweib_update_kappa(eta2, alpha2, kappa2, frail, y1,
                          delta_cr, delta_cr_sum, kappa2_a, kappa2_b,
@@ -1122,38 +1107,31 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
       // Rcpp::Rcout << "updated kappa2: " << kappa2 << "\n";
     } else if(move_unit < cumprobs[2]){ //kappa3
-    // } else if(move==2){ //kappa3
       move_vec(M) = 2;
       Bweib_update_kappa(eta3, alpha3, kappa3, frail_sm, y_sm,
                          delta_sm, delta_sm_sum, kappa3_a, kappa3_b,
                          accept_kappa3, curr_loglik_sm);
       // Rcpp::Rcout << "updated kappa3: " << kappa3 << "\n";
     } else if(move_unit < cumprobs[3]){ //alpha1
-    // } else if(move==3){ //alpha1
       move_vec(M) = 3;
       Bweib_update_alpha(eta1, alpha1, kappa1, frail,    y1,   delta1,
                          mhProp_alpha1_var, alpha1_a, alpha1_b,
                          accept_alpha1, curr_loglik1);
       // Rcpp::Rcout << "updated alpha1: " << alpha1 << "\n";
     } else if(move_unit < cumprobs[4]){ //alpha2
-    // } else if(move==4){ //alpha2
       move_vec(M) = 4;
       Bweib_update_alpha(eta2, alpha2, kappa2, frail,    y1,   delta_cr,
                          mhProp_alpha2_var, alpha2_a, alpha2_b,
                          accept_alpha2, curr_loglik_cr);
       // Rcpp::Rcout << "updated alpha2: " << alpha2 << "\n";
     } else if(move_unit < cumprobs[5]){ //alpha3
-    // } else if(move==5){ //alpha3
       move_vec(M) = 5;
       Bweib_update_alpha(eta3, alpha3, kappa3, frail_sm, y_sm, delta_sm,
                          mhProp_alpha3_var, alpha3_a, alpha3_b,
                          accept_alpha3, curr_loglik_sm);
       // Rcpp::Rcout << "updated alpha3: " << alpha3 << "\n";
     } else if(move_unit < cumprobs[6]){ //frailties
-    // } else if(move==6){ //frailties
       move_vec(M) = 6;
-
-
       // Rcpp::Rcout << "updating frailties... " << "\n";
 
       //This is the update for gamma-distributed frailties
@@ -1162,7 +1140,6 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       //                               y1, y_sm, sm_ind, sm_ind_long,
       //                               delta1, delta_cr, delta_sm, accept_frail,
       //                               curr_loglik1, curr_loglik_cr, curr_loglik_sm);
-
 
       //This is the update for lognormal-distributed frailties
       BweibScrSMlogit_update_frail_ln(frail, frail_sm, frailD, theta, eta1, eta2, eta3, etaD,
@@ -1174,7 +1151,6 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
       // Rcpp::Rcout << "updated frail: " << frail(arma::span(0,10)) << "\n";
     } else if(move_unit < cumprobs[7]){ //theta (frailty variance)
-    // } else if(move==7){ //theta (frailty variance)
       move_vec(M) = 7;
 
       //This is update for gamma-distributed frailty variance
@@ -1185,29 +1161,23 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
       // Rcpp::Rcout << "updated theta: " << theta << "\n";
     } else if(move_unit < cumprobs[8]){ //beta1
-    // } else if(move==8){//beta1
       move_vec(M) = 8;
 
       Bweib_update_betaj(beta1, eta1, alpha1, kappa1, frail, y1, delta1,
                          Xmat1, accept_beta1, curr_loglik1);
       // Rcpp::Rcout << "updated beta1: " << beta1.t() << "\n";
     } else if(move_unit < cumprobs[9]){ //beta2
-    // } else if(move==9){//beta2
       move_vec(M) = 9;
       Bweib_update_betaj(beta2, eta2, alpha2, kappa2, frail, y1, delta_cr,
                          Xmat2, accept_beta2, curr_loglik_cr);
       // Rcpp::Rcout << "updated beta2: " << beta2.t() << "\n";
     } else if(move_unit < cumprobs[10]){ //beta3
-    // } else if(move==10){//beta3
       move_vec(M) = 10;
       Bweib_update_betaj(beta3, eta3, alpha3, kappa3, frail_sm, y_sm, delta_sm,
                          Xmat3, accept_beta3, curr_loglik_sm);
       // Rcpp::Rcout << "updated beta3: " << beta3.t() << "\n";
     } else { //betaD
-    // } else if(move==11){//betaD
       move_vec(M) = 11;
-
-      // Rcpp::Rcout << "updating betaD... " << "\n";
 
       Logit_update_beta_frail(betaD, etaD, XmatD, frailD, mean_const, P0diag, accept_betaD);
 
@@ -1224,23 +1194,26 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       sample_kappa1(StoreInx - 1) = kappa1;
       sample_kappa2(StoreInx - 1) = kappa2;
       sample_kappa3(StoreInx - 1) = kappa3;
-      if(frail_ind>0){
-        sample_theta(StoreInx - 1) = theta;
-      }
       sample_beta1.col(StoreInx - 1) = beta1;
       sample_beta2.col(StoreInx - 1) = beta2;
       sample_beta3.col(StoreInx - 1) = beta3;
       sample_betaD.col(StoreInx - 1) = betaD;
-      if(frail_ind>0 && frail_path.size() > 0){
-        sample_frail.col(StoreInx - 1) = frail;
+      if(frail_ind>0){
+        sample_theta(StoreInx - 1) = theta;
+      }
+      if(frail_ind>0 && nGam_save>0){
+        sample_frail.col(StoreInx - 1) = frail.head(nGam_save);
       }
 
-      //deviance information
+      //deviance information (might be better to compute "marginal" version here, millar 2009)
       BweibScrSMlogit_logLH_vec(logLH_vec, frail, eta1, eta2, eta3, etaD,
                                 kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
                                 y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
                                 sm_ind_long, delta1_ind_long);
 
+      if(nlogLHi_save>0){
+        sample_logLHi.col(StoreInx - 1) = logLH_vec.head(nlogLHi_save);
+      }
       //store overall log likelihood sample
       sample_logLH(StoreInx - 1) = arma::accu(logLH_vec);
       //update running mean likelihood contributions
@@ -1255,41 +1228,17 @@ Rcpp::List WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
     }
   }
 
-  if(frail_path.size() > 0){
-    // Rcpp::Rcout << "printing frailties to the address: " << frail_path << "\n" ;
-    sample_frail.save(frail_path, arma::csv_ascii);
-  }
+  accept_base(0) = accept_alpha1;
+  accept_base(1) = accept_alpha2;
+  accept_base(2) = accept_alpha3;
+  accept_base(3) = accept_kappa1;
+  accept_base(4) = accept_kappa2;
+  accept_base(5) = accept_kappa3;
+  accept_base(6) = accept_theta;
+  accept_base(7) = accept_betaD;
 
-  return Rcpp::List::create(
-    Rcpp::Named("samples") = Rcpp::List::create(
-      Rcpp::Named("alpha1") = sample_alpha1,
-      Rcpp::Named("alpha2") = sample_alpha2,
-      Rcpp::Named("alpha3") = sample_alpha3,
-      Rcpp::Named("kappa1") = sample_kappa1,
-      Rcpp::Named("kappa2") = sample_kappa2,
-      Rcpp::Named("kappa3") = sample_kappa3,
-      Rcpp::Named("theta") = sample_theta,
-      Rcpp::Named("beta1") = sample_beta1.t(),
-      Rcpp::Named("beta2") = sample_beta2.t(),
-      Rcpp::Named("beta3") = sample_beta3.t(),
-      Rcpp::Named("betaD") = sample_betaD.t(),
-      Rcpp::Named("logLH") = sample_logLH,
-      Rcpp::Named("LH_mean_vec") = LH_mean_vec,
-      Rcpp::Named("invLH_mean_vec") = invLH_mean_vec),
-      Rcpp::Named("accept") = Rcpp::List::create(
-        Rcpp::Named("move") = move_vec,
-        Rcpp::Named("alpha1") = accept_alpha1,
-        Rcpp::Named("alpha2") = accept_alpha2,
-        Rcpp::Named("alpha3") = accept_alpha3,
-        Rcpp::Named("kappa1") = accept_kappa1,
-        Rcpp::Named("kappa2") = accept_kappa2,
-        Rcpp::Named("kappa3") = accept_kappa3,
-        Rcpp::Named("theta") = accept_theta,
-        Rcpp::Named("beta1") = accept_beta1,
-        Rcpp::Named("beta2") = accept_beta2,
-        Rcpp::Named("beta3") = accept_beta3,
-        Rcpp::Named("betaD") = accept_betaD,
-        Rcpp::Named("gamma") = accept_frail));
+  return;
+
 }
 
 
@@ -1539,9 +1488,9 @@ Rcpp::List WeibSCRlogitmcmc2(const arma::vec &y1, const arma::vec &y_sm,
   int accept_alpha3 = 0;
   int accept_theta = 0;
   int accept_betaD = 0; //because all logit betas are updated at once
-  arma::uvec accept_beta1 = arma::uvec(p1,arma::fill::zeros);
-  arma::uvec accept_beta2 = arma::uvec(p2,arma::fill::zeros);
-  arma::uvec accept_beta3 = arma::uvec(p3,arma::fill::zeros);
+  arma::vec accept_beta1 = arma::vec(p1,arma::fill::zeros);
+  arma::vec accept_beta2 = arma::vec(p2,arma::fill::zeros);
+  arma::vec accept_beta3 = arma::vec(p3,arma::fill::zeros);
 
   arma::vec accept_frail = arma::vec(n,arma::fill::zeros);
   //int accept_frail = 0;

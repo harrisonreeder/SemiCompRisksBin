@@ -16,7 +16,7 @@
 #' @export
 Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                       hyperParams, mcmcParams, n_chains, start_mat=NULL, frailty=TRUE,
-                      frail_path=NULL){
+                      frail_path=NULL, logLHi_path=NULL){
   # browser()
 
   ##INITIALIZE DATA##
@@ -99,6 +99,11 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   thin=mcmcParams$run$thin
   burninPerc=mcmcParams$run$burninPerc
 
+  #set up where if it's less than 0, set to n, otherwise take what it is.
+  nGam_save=if(mcmcParams$storage$nGam_save <0) n else mcmcParams$storage$nGam_save
+  nlogLHi_save=if(mcmcParams$storage$nlogLHi_save <0) n else mcmcParams$storage$nlogLHi_save
+
+
   n_burnin <- numReps * burninPerc
   n_sample <- numReps - n_burnin
   n_store  <- numReps/thin * (1 - burninPerc)
@@ -137,7 +142,7 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                              paste0("gamma",1:n))
   }
 
-
+  #### PREALLOCATE OUTPUT LIST ####
   out_list <- list(
     #generate an array to store the resulting samples
     samples = array(dim = c(n_store, n_chains, 7 + p1 + p2 + p3 + pD), #even if frailty==FALSE, leave empty row for it.
@@ -155,33 +160,67 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                  nCov = c(p1,p2,p3,pD),
                  hyper_vec = hyper_vec, start_mat = start_mat,
                  tuning_vec = tuning_vec,
-                 #nGam_save,
-                 numReps = numReps, thin = thin, ymax=ymax,
-                 path = frail_path, burninPerc = burninPerc,
+                 nGam_save = nGam_save, nlogLHi_save = nlogLHi_save,
+                 numReps = numReps, thin = thin,
+                 burninPerc = burninPerc, n_store=n_store,
+                 ymax=ymax, n=n,
+                 frail_path = frail_path, logLHi_path = logLHi_path,
                  hz.type = "Weibull", model = "semi-Markov", nChain = n_chains,
                  mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin)), #slight duplication but that's ok
     #empty list to keep "accept" values in.
     accept = vector(mode = "list", length = n_chains),
-    diagnostics=list(dev=NA, DIC = NA, LPML = NA),
+    move = vector(mode = "list", length = n_chains),
+    diagnostics=list(dev=NA, DIC = NA, LPML = NA,
+                     #the mean log likelihood at each stored iteration
+                     logLH_mat = matrix(data = NA,nrow = n_store, ncol = n_chains),
+                     #the running mean of the likelihood and inverse likelihood for each subject across the samples
+                     LH_mean_mat = matrix(data = NA,nrow = n, ncol = n_chains),
+                     invLH_mean_mat = matrix(data = NA,nrow = n, ncol = n_chains)),
     class = c("Bayes_HReg2", "IDlogit", "Ind", "WB")
   )
   names(out_list$accept) <- paste0("chain",1:n_chains)
 
-  #now, temporary storage for the DIC and LPML raw ingredients
-  #the mean log likelihood at each stored iteration
-  logLH_mat <- matrix(data = NA,nrow = n_store, ncol = n_chains)
-  #the running mean of the likelihood and inverse likelihood for each subject across the samples
-  invLH_mean_mat <- LH_mean_mat <- matrix(data = NA,nrow = n, ncol = n_chains)
-
+  #### RUN SAMPLER ####
   # #TODO: parallelize this loop (I know it can be done!)
   for(i in 1:n_chains){
     print(paste0("Chain: ", i))
 
-    if(!is.null(frail_path)){
-      frail_path_temp <- paste0(frail_path,"/frail_chain", i, ".csv")
-    } else{
-      frail_path_temp <- ""
-    }
+    #initialize all of the vectors of individually sampled parameters
+    sample_alpha1 <- numeric(n_store)
+    sample_alpha2 <- numeric(n_store)
+    sample_alpha3 <- numeric(n_store)
+    sample_kappa1 <- numeric(n_store)
+    sample_kappa2 <- numeric(n_store)
+    sample_kappa3 <- numeric(n_store)
+    sample_theta <- numeric(n_store)
+
+    #initialize all of the matrices of regression parameters
+    sample_beta1 <- matrix(data=0,nrow=p1,ncol=n_store)
+    sample_beta2 <- matrix(data=0,nrow=p2,ncol=n_store)
+    sample_beta3 <- matrix(data=0,nrow=p3,ncol=n_store)
+    sample_betaD <- matrix(data=0,nrow=pD,ncol=n_store)
+
+    #initialize matrices to store frailties and log-likelihood, as needed
+    sample_frail <- matrix(data=0,nrow=nGam_save,ncol=n_store)
+    sample_logLHi <- matrix(data=0,nrow=nlogLHi_save,ncol=n_store)
+
+    #initialize integers counting acceptance of individually sampled parameters
+    accept_base <- numeric(8)
+
+    #initialize vectors counting acceptance of sampled vectors
+    accept_frail <- numeric(n)
+    accept_beta1 <- numeric(p1)
+    accept_beta2 <- numeric(p2)
+    accept_beta3 <- numeric(p3)
+
+    #initialize vectors for diagnostics
+    LH_mean_vec <- numeric(n)
+    invLH_mean_vec <- numeric(n)
+    sample_logLH <- numeric(n_store)
+    sample_logLH_i <- matrix(data = 0, nrow = n, ncol=n_store)
+
+    #initialize move vector
+    move_vec <- numeric(numReps)
 
     mcmcRet <- WeibSCRlogitmcmc(y1=y1, y_sm=y_sm,
                                 delta1=delta1, #indicator for nonterminal event followed by immediate death
@@ -191,31 +230,71 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                                 delta1D_sub=delta1D_sub, #immediate terminal event indicator in group with nonterminal first event
                                 Xmat1=Xmat1, Xmat2=Xmat2, Xmat3=Xmat3, XmatD=XmatD,
                                 hyper_vec=hyper_vec, tuning_vec=tuning_vec, start_vec=start_mat[,i],
+                                sample_alpha1 = sample_alpha1,
+                                sample_alpha2 = sample_alpha2,
+                                sample_alpha3 = sample_alpha3,
+                                sample_kappa1 = sample_kappa1,
+                                sample_kappa2 = sample_kappa2,
+                                sample_kappa3 = sample_kappa3,
+                                sample_beta1 = sample_beta1,
+                                sample_beta2 = sample_beta2,
+                                sample_beta3 = sample_beta3,
+                                sample_betaD = sample_betaD,
+                                sample_frail = sample_frail,
+                                sample_theta = sample_theta,
+                                accept_base = accept_base,
+                                accept_frail = accept_frail,
+                                accept_beta1 = accept_beta1,
+                                accept_beta2 = accept_beta2,
+                                accept_beta3 = accept_beta3,
+                                LH_mean_vec = LH_mean_vec,
+                                invLH_mean_vec = invLH_mean_vec,
+                                sample_logLH = sample_logLH,
+                                sample_logLHi = sample_logLHi,
+                                move_vec=move_vec,
                                 n_burnin=n_burnin, n_sample=n_sample, thin=thin,
                                 frail_ind = as.integer(frailty),
-                                frail_path = frail_path_temp)
+                                nGam_save=nGam_save, nlogLHi_save=nlogLHi_save)
 
-    out_list[["samples"]][,i,1] <- mcmcRet[["samples"]][["kappa1"]]
-    out_list[["samples"]][,i,2] <- mcmcRet[["samples"]][["alpha1"]]
-    out_list[["samples"]][,i,3] <- mcmcRet[["samples"]][["kappa2"]]
-    out_list[["samples"]][,i,4] <- mcmcRet[["samples"]][["alpha2"]]
-    out_list[["samples"]][,i,5] <- mcmcRet[["samples"]][["kappa3"]]
-    out_list[["samples"]][,i,6] <- mcmcRet[["samples"]][["alpha3"]]
-    out_list[["samples"]][,i,7] <- mcmcRet[["samples"]][["theta"]]
-    if(p1>0) out_list[["samples"]][,i,8:(7+p1)] <- mcmcRet[["samples"]][["beta1"]]
-    if(p2>0) out_list[["samples"]][,i,(8+p1):(7+p1+p2)] <- mcmcRet[["samples"]][["beta2"]]
-    if(p3>0) out_list[["samples"]][,i,(8+p1+p2):(7+p1+p2+p3)] <- mcmcRet[["samples"]][["beta3"]]
-    if(pD>0) out_list[["samples"]][,i,(8+p1+p2+p3):(7+p1+p2+p3+pD)] <- mcmcRet[["samples"]][["betaD"]]
-    logLH_mat[,i] <- mcmcRet[["samples"]][["logLH"]]
-    LH_mean_mat[,i] <- mcmcRet[["samples"]][["LH_mean_vec"]]
-    invLH_mean_mat[,i] <- mcmcRet[["samples"]][["invLH_mean_vec"]]
-    out_list[["accept"]][[paste0("chain",i)]] <- mcmcRet$accept
+    out_list[["samples"]][,i,1] <- sample_kappa1
+    out_list[["samples"]][,i,2] <- sample_alpha1
+    out_list[["samples"]][,i,3] <- sample_kappa2
+    out_list[["samples"]][,i,4] <- sample_alpha2
+    out_list[["samples"]][,i,5] <- sample_kappa3
+    out_list[["samples"]][,i,6] <- sample_alpha3
+    out_list[["samples"]][,i,7] <- sample_theta
+    if(p1>0) out_list[["samples"]][,i,8:(7+p1)] <- t(sample_beta1)
+    if(p2>0) out_list[["samples"]][,i,(8+p1):(7+p1+p2)] <- t(sample_beta2)
+    if(p3>0) out_list[["samples"]][,i,(8+p1+p2):(7+p1+p2+p3)] <- t(sample_beta3)
+    if(pD>0) out_list[["samples"]][,i,(8+p1+p2+p3):(7+p1+p2+p3+pD)] <- t(sample_betaD)
+    out_list$diagnostics$logLH_mat[,i] <- sample_logLH
+    out_list$diagnostics$LH_mean_mat[,i] <- LH_mean_vec
+    out_list$diagnostics$invLH_mean_mat[,i] <- invLH_mean_vec
+
+    #save the gammas and the log-likelihood matrix as RDS objects.
+    if(!is.null(frail_path) & nGam_save > 0){
+      saveRDS(sample_frail, file=paste0(frail_path,"/frail_chain", i, ".RDS"))
+    }
+    #save log-likelihood contribution matrix
+    if(!is.null(logLHi_path) & nlogLHi_save > 0){
+      saveRDS(sample_logLHi, file=paste0(logLHi_path,"/logLHi_chain", i, ".RDS"))
+    }
+
+    #reassign all the acceptance things later.
+    out_list[["accept"]][[paste0("chain",i)]] <-
+      list(accept_alpha1 = accept_base[1], accept_alpha2 = accept_base[2],
+           accept_alpha3 = accept_base[3], accept_kappa1 = accept_base[4],
+           accept_kappa2 = accept_base[5], accept_kappa3 = accept_base[6],
+           accept_theta = accept_base[7], accept_frail = accept_frail,
+           accept_beta1 = accept_beta1, accept_beta2 = accept_beta2,
+           accept_beta3 = accept_beta3, accept_betaD = accept_base[8])
+    out_list[["move"]][[paste0("chain",i)]] <- move_vec
   }
 
   #compute the final model diagnostics based on the sampled outputs
-  out_list$diagnostics$dev <- -2*mean(logLH_mat)
-  out_list$diagnostics$DIC = 2*out_list$diagnostics$dev + 2*sum(log(apply(LH_mean_mat, 1, mean)))
-  out_list$diagnostics$LPML = -sum(log(apply(invLH_mean_mat, 1, mean)))
+  out_list$diagnostics$dev <- -2*mean(out_list$diagnostics$logLH_mat)
+  out_list$diagnostics$DIC = 2*out_list$diagnostics$dev + 2*sum(log(apply(out_list$diagnostics$LH_mean_mat, 1, mean)))
+  out_list$diagnostics$LPML = -sum(log(apply(out_list$diagnostics$invLH_mean_mat, 1, mean)))
 
   class(out_list) <- "Bayes_HReg2"
   #for now, my plan is going to be to leverage the bayesplot package to make visuals

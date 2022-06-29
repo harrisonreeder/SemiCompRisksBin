@@ -14,7 +14,8 @@ Bayes_SCR_logit(
   n_chains,
   start_mat = NULL,
   frailty = TRUE,
-  frail_path = NULL
+  frail_path = NULL,
+  logLHi_path = NULL
 )
 }
 \arguments{
