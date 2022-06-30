@@ -81,8 +81,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // WeibSCRlogitmcmc
-void WeibSCRlogitmcmc(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::uvec& delta1D_sub, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, const arma::mat& XmatD, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, arma::vec& sample_alpha1, arma::vec& sample_alpha2, arma::vec& sample_alpha3, arma::vec& sample_kappa1, arma::vec& sample_kappa2, arma::vec& sample_kappa3, arma::mat& sample_beta1, arma::mat& sample_beta2, arma::mat& sample_beta3, arma::mat& sample_betaD, arma::mat& sample_frail, arma::vec& sample_theta, arma::vec& accept_base, arma::vec& accept_frail, arma::vec& accept_beta1, arma::vec& accept_beta2, arma::vec& accept_beta3, arma::vec& LH_mean_vec, arma::vec& invLH_mean_vec, arma::vec& sample_logLH, arma::mat& sample_logLHi, arma::vec& move_vec, int n_burnin, int n_sample, int thin, int frail_ind, int nGam_save, int nlogLHi_save);
-RcppExport SEXP _SemiCompRisksBin_WeibSCRlogitmcmc(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP delta1D_subSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP XmatDSEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP sample_alpha1SEXP, SEXP sample_alpha2SEXP, SEXP sample_alpha3SEXP, SEXP sample_kappa1SEXP, SEXP sample_kappa2SEXP, SEXP sample_kappa3SEXP, SEXP sample_beta1SEXP, SEXP sample_beta2SEXP, SEXP sample_beta3SEXP, SEXP sample_betaDSEXP, SEXP sample_frailSEXP, SEXP sample_thetaSEXP, SEXP accept_baseSEXP, SEXP accept_frailSEXP, SEXP accept_beta1SEXP, SEXP accept_beta2SEXP, SEXP accept_beta3SEXP, SEXP LH_mean_vecSEXP, SEXP invLH_mean_vecSEXP, SEXP sample_logLHSEXP, SEXP sample_logLHiSEXP, SEXP move_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP, SEXP frail_indSEXP, SEXP nGam_saveSEXP, SEXP nlogLHi_saveSEXP) {
+void WeibSCRlogitmcmc(const arma::vec& y1, const arma::vec& y_sm, const arma::uvec& delta1, const arma::uvec& delta1noD, const arma::uvec& delta_cr, const arma::uvec& delta_sm, const arma::uvec& delta1D_sub, const arma::mat& Xmat1, const arma::mat& Xmat2, const arma::mat& Xmat3, const arma::mat& XmatD, const arma::vec& hyper_vec, const arma::vec& tuning_vec, const arma::vec& start_vec, arma::vec& sample_alpha1, arma::vec& sample_alpha2, arma::vec& sample_alpha3, arma::vec& sample_kappa1, arma::vec& sample_kappa2, arma::vec& sample_kappa3, arma::mat& sample_beta1, arma::mat& sample_beta2, arma::mat& sample_beta3, arma::mat& sample_betaD, arma::mat& sample_frail, arma::vec& sample_theta, arma::vec& accept_base, arma::vec& accept_frail, arma::vec& accept_beta1, arma::vec& accept_beta2, arma::vec& accept_beta3, arma::vec& LH_marg_mean_vec, arma::vec& invLH_marg_mean_vec, arma::vec& sample_logLH_marg, arma::mat& sample_logLHi_marg, arma::vec& LH_mean_vec, arma::vec& invLH_mean_vec, arma::vec& sample_logLH, arma::mat& sample_logLHi, arma::vec& move_vec, int n_burnin, int n_sample, int thin, int frail_ind, int nGam_save, int nlogLHi_save, const arma::vec& gh_nodes, const arma::vec& gh_weights);
+RcppExport SEXP _SemiCompRisksBin_WeibSCRlogitmcmc(SEXP y1SEXP, SEXP y_smSEXP, SEXP delta1SEXP, SEXP delta1noDSEXP, SEXP delta_crSEXP, SEXP delta_smSEXP, SEXP delta1D_subSEXP, SEXP Xmat1SEXP, SEXP Xmat2SEXP, SEXP Xmat3SEXP, SEXP XmatDSEXP, SEXP hyper_vecSEXP, SEXP tuning_vecSEXP, SEXP start_vecSEXP, SEXP sample_alpha1SEXP, SEXP sample_alpha2SEXP, SEXP sample_alpha3SEXP, SEXP sample_kappa1SEXP, SEXP sample_kappa2SEXP, SEXP sample_kappa3SEXP, SEXP sample_beta1SEXP, SEXP sample_beta2SEXP, SEXP sample_beta3SEXP, SEXP sample_betaDSEXP, SEXP sample_frailSEXP, SEXP sample_thetaSEXP, SEXP accept_baseSEXP, SEXP accept_frailSEXP, SEXP accept_beta1SEXP, SEXP accept_beta2SEXP, SEXP accept_beta3SEXP, SEXP LH_marg_mean_vecSEXP, SEXP invLH_marg_mean_vecSEXP, SEXP sample_logLH_margSEXP, SEXP sample_logLHi_margSEXP, SEXP LH_mean_vecSEXP, SEXP invLH_mean_vecSEXP, SEXP sample_logLHSEXP, SEXP sample_logLHiSEXP, SEXP move_vecSEXP, SEXP n_burninSEXP, SEXP n_sampleSEXP, SEXP thinSEXP, SEXP frail_indSEXP, SEXP nGam_saveSEXP, SEXP nlogLHi_saveSEXP, SEXP gh_nodesSEXP, SEXP gh_weightsSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::vec& >::type y1(y1SEXP);
@@ -116,6 +116,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::vec& >::type accept_beta1(accept_beta1SEXP);
     Rcpp::traits::input_parameter< arma::vec& >::type accept_beta2(accept_beta2SEXP);
     Rcpp::traits::input_parameter< arma::vec& >::type accept_beta3(accept_beta3SEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type LH_marg_mean_vec(LH_marg_mean_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type invLH_marg_mean_vec(invLH_marg_mean_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type sample_logLH_marg(sample_logLH_margSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type sample_logLHi_marg(sample_logLHi_margSEXP);
     Rcpp::traits::input_parameter< arma::vec& >::type LH_mean_vec(LH_mean_vecSEXP);
     Rcpp::traits::input_parameter< arma::vec& >::type invLH_mean_vec(invLH_mean_vecSEXP);
     Rcpp::traits::input_parameter< arma::vec& >::type sample_logLH(sample_logLHSEXP);
@@ -127,7 +131,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type frail_ind(frail_indSEXP);
     Rcpp::traits::input_parameter< int >::type nGam_save(nGam_saveSEXP);
     Rcpp::traits::input_parameter< int >::type nlogLHi_save(nlogLHi_saveSEXP);
-    WeibSCRlogitmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, sample_alpha1, sample_alpha2, sample_alpha3, sample_kappa1, sample_kappa2, sample_kappa3, sample_beta1, sample_beta2, sample_beta3, sample_betaD, sample_frail, sample_theta, accept_base, accept_frail, accept_beta1, accept_beta2, accept_beta3, LH_mean_vec, invLH_mean_vec, sample_logLH, sample_logLHi, move_vec, n_burnin, n_sample, thin, frail_ind, nGam_save, nlogLHi_save);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gh_nodes(gh_nodesSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gh_weights(gh_weightsSEXP);
+    WeibSCRlogitmcmc(y1, y_sm, delta1, delta1noD, delta_cr, delta_sm, delta1D_sub, Xmat1, Xmat2, Xmat3, XmatD, hyper_vec, tuning_vec, start_vec, sample_alpha1, sample_alpha2, sample_alpha3, sample_kappa1, sample_kappa2, sample_kappa3, sample_beta1, sample_beta2, sample_beta3, sample_betaD, sample_frail, sample_theta, accept_base, accept_frail, accept_beta1, accept_beta2, accept_beta3, LH_marg_mean_vec, invLH_marg_mean_vec, sample_logLH_marg, sample_logLHi_marg, LH_mean_vec, invLH_mean_vec, sample_logLH, sample_logLHi, move_vec, n_burnin, n_sample, thin, frail_ind, nGam_save, nlogLHi_save, gh_nodes, gh_weights);
     return R_NilValue;
 END_RCPP
 }
@@ -164,7 +170,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_SemiCompRisksBin_rpg1z_devroye", (DL_FUNC) &_SemiCompRisksBin_rpg1z_devroye, 1},
     {"_SemiCompRisksBin_WeibUnimcmc", (DL_FUNC) &_SemiCompRisksBin_WeibUnimcmc, 9},
     {"_SemiCompRisksBin_WeibSCRmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRmcmc, 16},
-    {"_SemiCompRisksBin_WeibSCRlogitmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc, 42},
+    {"_SemiCompRisksBin_WeibSCRlogitmcmc", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc, 48},
     {"_SemiCompRisksBin_WeibSCRlogitmcmc2", (DL_FUNC) &_SemiCompRisksBin_WeibSCRlogitmcmc2, 17},
     {NULL, NULL, 0}
 };

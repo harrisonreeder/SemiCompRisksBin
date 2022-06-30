@@ -4,6 +4,16 @@
 #include "PG_utilities.h"
 // [[Rcpp::depends(RcppArmadillo)]]
 
+
+#define Pi 3.141592653589793238462643383280
+
+//logsumexp trick
+
+double logsumexpnew(double x,double y){
+  double c = fmax(x,y);
+  return c + log(exp(x-c) + exp(y-c));
+}
+
 void Logit_update_beta_frail(arma::vec& beta, arma::vec& eta, const arma::mat& Xmat,
                              const arma::vec& frail, const arma::vec& mean_const,
                              const arma::vec& P0diag, int& accept_beta){
@@ -508,10 +518,63 @@ void BweibScrSMlogit_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
   }
 }
 
+//version that takes a single logfrailty value, that's a helper for below
 
+void BweibScrSMlogit_logLH_marg_vec(arma::vec &logLH_marg_vec,
+                               const arma::vec &eta1, const arma::vec &eta2,
+                               const arma::vec &eta3, const arma::vec &etaD,
+                               const double &kappa1, const double &alpha1,
+                               const double &kappa2, const double &alpha2,
+                               const double &kappa3, const double &alpha3, const double &theta,
+                               const arma::vec &y1, const arma::vec &y_sm,
+                               const arma::uvec &delta1, const arma::uvec &delta1noD,
+                               const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                               const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long,
+                               const arma::vec &gh_nodes, const arma::vec &gh_weights){
+  int n = y1.n_rows;
+  double logliki, logliki_marg, logfrail, pisqrt;
 
+  //nodes are scaled by sqrt(2) * sigma * x + mu, but here sigma = sqrt(theta) and mu=0
+  arma::vec gh_nodes_adj = sqrt(theta * 2) * gh_nodes;
+  //note in gauss-hermite derivation there's an extra pi^{-.5} to fold into weights
+  arma::vec log_gh_weights_adj = arma::log(gh_weights) - 0.5 * log(Pi);
 
+  //loop through subjects
+  for(int i = 0; i < n; i++){
+    logliki_marg = 0;
 
+    //loop through nodes
+    for(int j = 0; j < gh_nodes.n_rows; j++){
+      logfrail = gh_nodes_adj(j);
+
+      logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), exp(logfrail))
+      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), exp(logfrail));
+      if(delta1(i)>0){ //nonterminal event has occurred
+        //I'm writing binary log-likelihood contribution as in
+        //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
+        logliki += -log1p( exp(etaD(delta1_ind_long(i)) + logfrail) );
+        if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
+          logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
+                                         alpha3, kappa3, eta3(sm_ind_long(i)), exp(logfrail));
+        } else{ //then non-terminal event has occurred followed by immediate death
+          //etaD cancels out from these, so just add the log-frailties
+          logliki += logfrail;
+        }
+      }
+
+      //now to accumulate the result using logsumexp trick
+      //log Lmarg = log( sum_j( exp( log w_j + log Lcond_j ) ) )
+      if(j == 0){
+        logliki_marg = logliki + log_gh_weights_adj(j);
+      } else{
+        logliki_marg = logsumexpnew(logliki_marg, logliki + log_gh_weights_adj(j));
+      }
+    }
+    //update ith contribution
+    logLH_marg_vec(i) = logliki_marg;
+  }
+
+}
 
 
 
@@ -869,13 +932,18 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        arma::vec &accept_beta1,
                        arma::vec &accept_beta2,
                        arma::vec &accept_beta3,
+                       arma::vec &LH_marg_mean_vec,
+                       arma::vec &invLH_marg_mean_vec,
+                       arma::vec &sample_logLH_marg,
+                       arma::mat &sample_logLHi_marg,
                        arma::vec &LH_mean_vec,
                        arma::vec &invLH_mean_vec,
                        arma::vec &sample_logLH,
                        arma::mat &sample_logLHi,
                        arma::vec &move_vec,
                        int n_burnin, int n_sample, int thin, int frail_ind,
-                       int nGam_save, int nlogLHi_save){
+                       int nGam_save, int nlogLHi_save,
+                       const arma::vec &gh_nodes, const arma::vec &gh_weights){
 
   //I'm trying something new, which is explicitly passing in data as three sets
   //of vectors, corresponding with the three transitions...
@@ -987,6 +1055,8 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
   //structures to store running likelihood contributions
   arma::vec logLH_vec = arma::vec(n,arma::fill::zeros);
+  arma::vec logLH_marg_vec = arma::vec(n,arma::fill::zeros);
+  arma::vec logLH_temp_vec = arma::vec(n,arma::fill::zeros); //placeholder used for computing marginal
 
   //temporary storage of MH acceptance counts
   int accept_kappa1 = 0;
@@ -1200,9 +1270,22 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       sample_betaD.col(StoreInx - 1) = betaD;
       if(frail_ind>0){
         sample_theta(StoreInx - 1) = theta;
-      }
-      if(frail_ind>0 && nGam_save>0){
-        sample_frail.col(StoreInx - 1) = frail.head(nGam_save);
+
+        if(nGam_save>0){
+          sample_frail.col(StoreInx - 1) = frail.head(nGam_save);
+        }
+
+        // Rcpp::Rcout << "iter: " << M << "\n";
+        BweibScrSMlogit_logLH_marg_vec(logLH_marg_vec, eta1, eta2, eta3, etaD,
+                                       kappa1, alpha1, kappa2, alpha2, kappa3, alpha3, theta,
+                                       y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                                       sm_ind_long, delta1_ind_long, gh_nodes, gh_weights);
+        sample_logLH_marg(StoreInx - 1) = arma::accu(logLH_marg_vec);
+        LH_marg_mean_vec = ((StoreInx - 1) * LH_marg_mean_vec + arma::exp(logLH_marg_vec)) / StoreInx;
+        invLH_marg_mean_vec = ((StoreInx - 1) * invLH_marg_mean_vec + arma::exp(-logLH_marg_vec)) / StoreInx;
+        if(nlogLHi_save>0){
+          sample_logLHi_marg.col(StoreInx - 1) = logLH_marg_vec.head(nlogLHi_save);
+        }
       }
 
       //deviance information (might be better to compute "marginal" version here, millar 2009)
@@ -1210,7 +1293,6 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                                 kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
                                 y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
                                 sm_ind_long, delta1_ind_long);
-
       if(nlogLHi_save>0){
         sample_logLHi.col(StoreInx - 1) = logLH_vec.head(nlogLHi_save);
       }

@@ -114,6 +114,9 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   if(!is.null(frail_path)){
     dir.create(paste(frail_path), recursive = TRUE, showWarnings = FALSE)
   }
+  if(!is.null(logLHi_path)){
+    dir.create(paste(logLHi_path), recursive = TRUE, showWarnings = FALSE)
+  }
 
   ####ASSIGN START VALUES####
   if(is.null(start_mat)){
@@ -141,6 +144,9 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                              if(pD>0) paste0("betaD_",1:pD),
                              paste0("gamma",1:n))
   }
+
+  gh_weights <- get_ghquad_pointsweights(n_quad = 15)$weights
+  gh_nodes <- get_ghquad_pointsweights(n_quad = 15)$points
 
   #### PREALLOCATE OUTPUT LIST ####
   out_list <- list(
@@ -170,12 +176,15 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     #empty list to keep "accept" values in.
     accept = vector(mode = "list", length = n_chains),
     move = vector(mode = "list", length = n_chains),
-    diagnostics=list(dev=NA, DIC = NA, LPML = NA,
+    diagnostics=list(dev=NA, DIC = NA, LPML = NA, dev_marg=NA, DIC_marg = NA, LPML_marg = NA,
                      #the mean log likelihood at each stored iteration
                      logLH_mat = matrix(data = NA,nrow = n_store, ncol = n_chains),
+                     logLH_marg_mat = if(frailty) matrix(data = NA,nrow = n_store, ncol = n_chains) else NULL,
                      #the running mean of the likelihood and inverse likelihood for each subject across the samples
                      LH_mean_mat = matrix(data = NA,nrow = n, ncol = n_chains),
-                     invLH_mean_mat = matrix(data = NA,nrow = n, ncol = n_chains)),
+                     invLH_mean_mat = matrix(data = NA,nrow = n, ncol = n_chains),
+                     LH_marg_mean_mat = if(frailty) matrix(data = NA,nrow = n, ncol = n_chains) else NULL,
+                     invLH_marg_mean_mat = if(frailty) matrix(data = NA,nrow = n, ncol = n_chains) else NULL),
     class = c("Bayes_HReg2", "IDlogit", "Ind", "WB")
   )
   names(out_list$accept) <- paste0("chain",1:n_chains)
@@ -203,6 +212,7 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     #initialize matrices to store frailties and log-likelihood, as needed
     sample_frail <- matrix(data=0,nrow=nGam_save,ncol=n_store)
     sample_logLHi <- matrix(data=0,nrow=nlogLHi_save,ncol=n_store)
+    sample_logLHi_marg <- if(frailty) matrix(data=0,nrow=nlogLHi_save,ncol=n_store) else matrix(nrow=0,ncol=0)
 
     #initialize integers counting acceptance of individually sampled parameters
     accept_base <- numeric(8)
@@ -214,10 +224,13 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     accept_beta3 <- numeric(p3)
 
     #initialize vectors for diagnostics
+    LH_marg_mean_vec <- if(frailty) numeric(n) else numeric(0)
+    invLH_marg_mean_vec <- if(frailty) numeric(n) else numeric(0)
+    sample_logLH_marg <- if(frailty) numeric(n_store) else numeric(0)
+
     LH_mean_vec <- numeric(n)
     invLH_mean_vec <- numeric(n)
     sample_logLH <- numeric(n_store)
-    sample_logLH_i <- matrix(data = 0, nrow = n, ncol=n_store)
 
     #initialize move vector
     move_vec <- numeric(numReps)
@@ -247,6 +260,10 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                                 accept_beta1 = accept_beta1,
                                 accept_beta2 = accept_beta2,
                                 accept_beta3 = accept_beta3,
+                                LH_marg_mean_vec = LH_marg_mean_vec,
+                                invLH_marg_mean_vec = invLH_marg_mean_vec,
+                                sample_logLH_marg = sample_logLH_marg,
+                                sample_logLHi_marg = sample_logLHi_marg,
                                 LH_mean_vec = LH_mean_vec,
                                 invLH_mean_vec = invLH_mean_vec,
                                 sample_logLH = sample_logLH,
@@ -254,7 +271,8 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
                                 move_vec=move_vec,
                                 n_burnin=n_burnin, n_sample=n_sample, thin=thin,
                                 frail_ind = as.integer(frailty),
-                                nGam_save=nGam_save, nlogLHi_save=nlogLHi_save)
+                                nGam_save=nGam_save, nlogLHi_save=nlogLHi_save,
+                                gh_nodes = gh_nodes, gh_weights = gh_weights)
 
     out_list[["samples"]][,i,1] <- sample_kappa1
     out_list[["samples"]][,i,2] <- sample_alpha1
@@ -270,6 +288,11 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     out_list$diagnostics$logLH_mat[,i] <- sample_logLH
     out_list$diagnostics$LH_mean_mat[,i] <- LH_mean_vec
     out_list$diagnostics$invLH_mean_mat[,i] <- invLH_mean_vec
+    if(frailty){
+      out_list$diagnostics$logLH_marg_mat[,i] <- sample_logLH_marg
+      out_list$diagnostics$LH_marg_mean_mat[,i] <- LH_marg_mean_vec
+      out_list$diagnostics$invLH_marg_mean_mat[,i] <- invLH_marg_mean_vec
+    }
 
     #save the gammas and the log-likelihood matrix as RDS objects.
     if(!is.null(frail_path) & nGam_save > 0){
@@ -278,6 +301,9 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
     #save log-likelihood contribution matrix
     if(!is.null(logLHi_path) & nlogLHi_save > 0){
       saveRDS(sample_logLHi, file=paste0(logLHi_path,"/logLHi_chain", i, ".RDS"))
+      if(frailty){
+        saveRDS(sample_logLHi_marg, file=paste0(logLHi_path,"/logLHi_marg_chain", i, ".RDS"))
+      }
     }
 
     #reassign all the acceptance things later.
@@ -295,6 +321,9 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   out_list$diagnostics$dev <- -2*mean(out_list$diagnostics$logLH_mat)
   out_list$diagnostics$DIC = 2*out_list$diagnostics$dev + 2*sum(log(apply(out_list$diagnostics$LH_mean_mat, 1, mean)))
   out_list$diagnostics$LPML = -sum(log(apply(out_list$diagnostics$invLH_mean_mat, 1, mean)))
+  out_list$diagnostics$dev_marg <- -2*mean(out_list$diagnostics$logLH_marg_mat)
+  out_list$diagnostics$DIC_marg = 2*out_list$diagnostics$dev_marg + 2*sum(log(apply(out_list$diagnostics$LH_marg_mean_mat, 1, mean)))
+  out_list$diagnostics$LPML_marg = -sum(log(apply(out_list$diagnostics$invLH_marg_mean_mat, 1, mean)))
 
   class(out_list) <- "Bayes_HReg2"
   #for now, my plan is going to be to leverage the bayesplot package to make visuals
