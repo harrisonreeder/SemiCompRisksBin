@@ -8,7 +8,10 @@
 #' @param mcmcParams list of hyperparameters
 #' @param n_chains integer for number of chains to fit
 #' @param start_mat a matrix of start values, with each column corresponding to a chain. If null, n_chains sets number of chains
+#' @param frailty Boolean indicating whether a gamma distributed subject-specific frailty should
+#'   be included.
 #' @param frail_path filepath for where to write frailty output
+#' @param logLHi_path filepath for where to write individual likelihood contribution output
 #'
 #'
 #' @return a list with outputs

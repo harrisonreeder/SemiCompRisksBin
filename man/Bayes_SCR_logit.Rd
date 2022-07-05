@@ -35,7 +35,12 @@ Bayes_SCR_logit(
 
 \item{start_mat}{a matrix of start values, with each column corresponding to a chain. If null, n_chains sets number of chains}
 
+\item{frailty}{Boolean indicating whether a gamma distributed subject-specific frailty should
+be included.}
+
 \item{frail_path}{filepath for where to write frailty output}
+
+\item{logLHi_path}{filepath for where to write individual likelihood contribution output}
 }
 \value{
 a list with outputs
