@@ -124,7 +124,7 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   ####ASSIGN START VALUES####
   if(is.null(start_mat)){
     if(is.null(n_chains)){stop("either supply non-null start_list, or specify n_chains.")}
-    theta_start_temp <- stats::runif(n_chains, 0.1, 1.1) #theta
+    theta_start_temp <- if(frailty) stats::runif(n_chains, 0.1, 1.1) else numeric(n_chains) #theta
     start_mat <- rbind(
       stats::runif(n_chains,0.1,1.1), #kappa1
       stats::runif(n_chains,0.8,1.2), #alpha1
@@ -324,9 +324,11 @@ Bayes_SCR_logit <- function(Formula, data, na.action="na.fail", subset=NULL,
   out_list$diagnostics$dev <- -2*mean(out_list$diagnostics$logLH_mat)
   out_list$diagnostics$DIC = 2*out_list$diagnostics$dev + 2*sum(log(apply(out_list$diagnostics$LH_mean_mat, 1, mean)))
   out_list$diagnostics$LPML = -sum(log(apply(out_list$diagnostics$invLH_mean_mat, 1, mean)))
-  out_list$diagnostics$dev_marg <- -2*mean(out_list$diagnostics$logLH_marg_mat)
-  out_list$diagnostics$DIC_marg = 2*out_list$diagnostics$dev_marg + 2*sum(log(apply(out_list$diagnostics$LH_marg_mean_mat, 1, mean)))
-  out_list$diagnostics$LPML_marg = -sum(log(apply(out_list$diagnostics$invLH_marg_mean_mat, 1, mean)))
+  if(frailty){
+    out_list$diagnostics$dev_marg <- -2*mean(out_list$diagnostics$logLH_marg_mat)
+    out_list$diagnostics$DIC_marg = 2*out_list$diagnostics$dev_marg + 2*sum(log(apply(out_list$diagnostics$LH_marg_mean_mat, 1, mean)))
+    out_list$diagnostics$LPML_marg = -sum(log(apply(out_list$diagnostics$invLH_marg_mean_mat, 1, mean)))
+  }
 
   class(out_list) <- "Bayes_HReg2"
   #for now, my plan is going to be to leverage the bayesplot package to make visuals

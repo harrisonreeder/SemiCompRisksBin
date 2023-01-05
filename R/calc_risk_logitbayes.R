@@ -41,6 +41,10 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
   model <- switch(tolower(model),
                   sm="semi-markov","semi-markov"="semi-markov",m="markov",markov="markov")
 
+  #right now, we assume that h3 and logit have same knots and denote that by leaving logit_tv_knots blank,
+  #so throw an error if not
+  if(!is.null(logit_tv_knots)){warning("logit_tv_knots isn't actually used, we assume it's the same as h3_tv_knots")}
+
   #set number of baseline parameters to be found in para vector
   nP01 <- nP02 <- nP03 <- 2
   #always assume theta parameter is present even for non-frailty model
@@ -119,7 +123,7 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
     if(tolower(logit_tv) == "linear"){
       n_logit_tv <- 1
       betaD_tv_linear <- para[(1+nP0+nP1+nP2+nP3+n_h3_tv+1+nPD):(nP0+nP1+nP2+nP3+n_h3_tv+1+nPD+n_logit_tv)]
-    } else if(tolower(h3_tv) %in% c("pw","piecewise")){
+    } else if(tolower(logit_tv) %in% c("pw","piecewise")){
       if(tolower(model) != "semi-markov"){stop("must be semi-markov to have t1 in h3.")}
       stopifnot(!is.null(logit_tv_knots))
       if(logit_tv_knots[1] != 0){logit_tv_knots <- c(0,logit_tv_knots)}
@@ -434,5 +438,224 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
 
   return(out_mat)
 }
+
+
+
+
+
+
+
+#' Calculate absolute risk profiles after non-terminal event
+#'
+#' This function calculates absolute risk profiles conditional on non-terminal
+#' event already occurring.
+#'
+#' @inheritParams calc_risk_logitbayes
+#'
+#' @return if Xmat has only one row, and t_cutoff is a scalar, then returns a 4 element row matrix
+#'   of probabilities. If Xmat has \code{n} rows, then returns an \code{n} by 4 matrix of probabilities.
+#'   If Xmat has \code{n} rows and t_cutoff is a vector of length \code{s}, then returns an \code{s} by 4 by \code{n} array.
+#' @export
+# calc_risk_term <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
+#                            t_cutoff, tol=1e-3, frailty=TRUE,
+#                            beta2frail=1, beta3frail=1, betaDfrail=1, #temporary, just get them in the mix
+#                            type="marginal", gamma=1,model="semi-markov",
+#                            h3_tv="none",h3tv_knots=NULL,
+#                            logit_ind=TRUE,logit_tv="none",logit_tv_knots=NULL,
+#                            n_quad = 15){
+#   #notice reduced default tolerance
+#   # browser()
+#   ##TO START, EXTRACT POINT ESTIMATES OF ALL PARAMETERS FROM MODEL OBJECT##
+#   ##*********************************************************************##
+#
+#   n <- max(1,nrow(Xmat1),nrow(Xmat2),nrow(Xmat3))
+#   t_length <- length(t_cutoff)
+#   #standardize namings for the use of "switch" below
+#   #for now, restrict to weibull
+#   stopifnot(tolower(hazard) %in% c("wb","weibull"))
+#   hazard <- switch(tolower(hazard),
+#                    wb="weibull",weibull="weibull")
+#   stopifnot(tolower(type) %in% c("c","conditional","m","marginal"))
+#   type <- switch(tolower(type),
+#                  c="conditional",conditional="conditional",m="marginal",marginal="marginal")
+#   #for now, restrict to semi-markov
+#   stopifnot(tolower(model) %in% c("sm","semi-markov"))
+#   model <- switch(tolower(model),
+#                   sm="semi-markov","semi-markov"="semi-markov",m="markov",markov="markov")
+#
+#   #right now, we assume that h3 and logit have same knots and denote that by leaving logit_tv_knots blank,
+#   #so throw an error if not
+#   stopifnot(is.null(logit_tv_knots))
+#
+#
+#   #set number of baseline parameters to be found in para vector
+#   nP01 <- nP02 <- nP03 <- 2
+#   #always assume theta parameter is present even for non-frailty model
+#   nP0 <- nP01 + nP02 + nP03 + 1
+#   if(frailty){
+#     theta <- para[nP0] #for bayesian model, theta is not logged, so just store directly
+#     if(type=="conditional" & length(gamma)==1){
+#       gamma <- rep(gamma,n)
+#     }
+#   } else{ #if no frailty, can't be "marginalized" over frailties
+#     theta <- 0
+#     type <- "conditional"
+#     gamma <- rep(1,n)
+#   }
+#
+#   #now, work backwards to dig out all of the relevant parameters
+#   #coefficients related to logit model
+#   if(logit_ind){
+#     #specify different forms by which t1 can be incorporated into the logit model
+#     #assumes that effect of t1 is at the end of the set of betaD coefficients
+#     if(tolower(logit_tv) == "linear"){
+#       n_logit_tv <- 1
+#       betaD_tv_linear <- utils::tail(para,n=n_logit_tv)
+#     } else if(tolower(h3_tv) %in% c("pw","piecewise")){
+#       if(tolower(model) != "semi-markov"){stop("must be semi-markov to have t1 in h3.")}
+#       stopifnot(!is.null(logit_tv_knots))
+#       if(logit_tv_knots[1] != 0){logit_tv_knots <- c(0,logit_tv_knots)}
+#       if(utils::tail(logit_tv_knots, n=1) != Inf){logit_tv_knots <- c(logit_tv_knots,Inf)}
+#       n_logit_tv <- length(logit_tv_knots) - 2
+#       betaD_tv <- c(0,utils::tail(para,n=n_logit_tv))
+#       betaD_tv_linear <- 0
+#     } else{
+#       n_logit_tv <- 0
+#       betaD_tv_linear <- 0
+#     }
+#
+#     #now, add in the component corresponding with the logit model
+#     if(!is.null(XmatD) && !(ncol(XmatD)==0)){
+#       nPD <- ncol(XmatD)
+#       betaD <- util::tail(para,n=n_logit_tv + nPD)[1:nPD]
+#       etaD <- as.vector(XmatD %*% betaD)
+#     } else{
+#       nPD <- 0
+#       etaD <- 0
+#     }
+#
+#     nP_logit <- 1+nPD+n_logit_tv
+#     beta0D <- util::tail(para,n=nP_logit)[1]
+#   } else{
+#     nP_logit <- 0
+#     etaD <- 0
+#   }
+#
+#   #specify different forms by which t1 can be incorporated into h3
+#   if(tolower(h3_tv) == "linear"){
+#     if(tolower(model) != "semi-markov"){stop("must be semi-markov to have t1 in h3.")}
+#     n_h3_tv <- 1
+#     beta3_tv_linear <- utils::tail(para,n = n_h3_tv + nP_logit)[1:n_h3_tv]
+#   } else if(tolower(h3_tv) %in% c("pw","piecewise")){
+#     if(tolower(model) != "semi-markov"){stop("must be semi-markov to have t1 in h3.")}
+#     stopifnot(!is.null(tv_knots))
+#     if(tv_knots[1] != 0){tv_knots <- c(0,tv_knots)}
+#     if(utils::tail(tv_knots, n=1) != Inf){tv_knots <- c(tv_knots,Inf)}
+#     n_h3_tv <- length(tv_knots) - 2
+#     beta3_tv_pw <- c(0,utils::tail(para,n=n_h3_tv + nP_logit)[1:n_h3_tv])
+#     beta3_tv_linear <- 0
+#   } else{
+#     n_h3_tv <- 0
+#     beta3_tv_linear <- 0
+#   }
+#
+#   if(!is.null(Xmat3) && !(ncol(Xmat3)==0)){
+#     nP3 <- ncol(Xmat3)
+#     beta3 <- utils::tail(para,n = nP3 + n_h3_tv + nP_logit)[1:nP3]
+#     eta3 <- as.vector(Xmat3 %*% beta3)
+#   } else{
+#     nP3 <- 0
+#     eta3 <- 0
+#   }
+#
+#   ##Set up the hazard functions##
+#   ##***************************##
+#   alpha3=para[6]
+#   kappa3=para[5]
+#
+#   ##set up the components for numerically integrating over the frailties
+#   gh_adj_nodes <- get_ghquad_pointsweights(n_quad=n_quad)$points * sqrt(2 * theta)
+#   gh_weights <- get_ghquad_pointsweights(n_quad=n_quad)$weights
+#
+#   #now, in the below, define an additional version of each function we integrate over
+#   #to compute `marginally`
+#
+#   if(logit_ind){
+#     pi_vec <- function(t1,index,gamma,betaD_tv_const,betaD_tv_lin){
+#       if(length(gamma) > 1){
+#         return(stats::plogis(q = beta0D + etaD[index] + betaD_tv_const + betaD_tv_lin * t1 + betaDfrail * log(gamma[index])))
+#       } else{
+#         return(stats::plogis(q = beta0D + etaD[index] + betaD_tv_const + betaD_tv_lin * t1 + betaDfrail * log(gamma)))
+#       }
+#     }
+#   } else{
+#     pi_vec <- function(t1,index,gamma,betaD_tv_const,betaD_tv_lin){ return(0)}
+#   }
+#
+#
+#   ##******************************************##
+#   ## Calculating posterior predictive density ##
+#   ##******************************************##
+#
+#   #probability of surviving from to time t2 given that non-terminal event happened at t1
+#   #naming convention comes from Putter (2007)
+#   S_2r <- function(t2,t1,index){
+#     if(tolower(h3_tv) %in% c("pw","piecewise")){
+#       curr_interval <- findInterval(x = t1,vec = tv_knots,left.open = TRUE)
+#       beta3_tv <- beta3_tv[curr_interval]
+#     } else if(tolower(h3_tv) == "linear"){
+#       beta3_tv <- beta3_tv_linear * t1
+#     } else{
+#       beta3_tv <- 0
+#     }
+#     if(logit_ind){
+#       #assume they use the same intervals for now.
+#       betaD_tv_const <- if(tolower(logit_tv) %in% c("pw","piecewise")) betaD_tv[curr_interval] else 0
+#       betaD_tv_lin <- betaD_tv_linear * t1
+#     } else{
+#       betaD_tv_const <- 0
+#       betaD_lin <- 0
+#     }
+#     if(type == "marginal"){
+#       temp <- 0
+#       for(x in 1:n_quad){
+#         temp2 <- (1-pi_vec(t1 = t1,index = index,gamma = exp(gh_adj_nodes[x]),
+#                  betaD_tv_const = betaD_tv_const,betaD_tv_lin = betaD_tv_lin)) *
+#           exp( -exp(gh_adj_nodes[x] * beta3frail + as.vector(eta3[index]) + beta3_tv) *
+#                  kappa3 * (t2 - t1)^alpha3)
+#         temp <- temp + temp2 * gh_weights[x]
+#       }
+#       temp / sqrt(pi)
+#     } else{
+#       (1-pi_vec(t1 = t1,index = index,gamma = gamma,
+#           betaD_tv_const = betaD_tv_const,betaD_tv_lin = betaD_tv_lin)) *
+#         exp(-gamma[index] * exp(as.vector(eta3[index]) + beta3_tv) *
+#             kappa3 * (t2 - t1)^alpha3)
+#     }
+#   }
+#
+#   ##ACTUALLY COMPUTING THE PROBABILITIES##
+#   ##************************************##
+#
+#   if(n > 1){
+#     if(t_length > 1){
+#       if(t_start_length > 1){
+#         out_mat <- array(dim=c(t_length,t_start_length,n),dimnames = list(paste0("t",t_cutoff),paste0("t",t_start,"_1"),paste0("i",1:n)))
+#         for(i in 1:n){out_mat[,,i] <- outer(t_cutoff,t_start,function(x,y){S_2r(x,y,i)})}
+#       } else{
+#         out_mat <- outer(ids,t_cutoff,function(x,y){S_2r(y,t_start,x)})
+#       }
+#     } else{
+#       if(t_start_length > 1){
+#         out_mat <- outer(ids,t_start,function(x,y){S_2r(t_cutoff,y,x)})
+#       }
+#     }
+#   } else{
+#     out_mat <- outer(t_cutoff,t_start,function(x,y){S_2r(x,y,1)})
+#   }
+#
+#
+#   return(out_mat)
+# }
 
 

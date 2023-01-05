@@ -358,6 +358,16 @@ predict.Bayes_HReg2 <- function(object, xnew=NULL,
 
 }
 
+#' function to predict probabilities from bayesian logistic regression
+#'
+#' function predicts probabilitites
+#'
+#' @param object object fit by Bayes_Logit
+#' @param xnew new matrix of values at which to predict
+#' @param alpha significance level for credible interval
+#' @param ... extras
+#'
+#' @return a matrix
 #' @export
 predict_logit <- function(object, xnew=NULL, alpha = 0.05, ...) {
   # browser()
@@ -368,7 +378,9 @@ predict_logit <- function(object, xnew=NULL, alpha = 0.05, ...) {
   nP0 = object$setup$nCov0
   value <- list()
 
-  nP0_tot <- if (object$setup$frailty == TRUE) sum(nP0) + 1 else sum(nP0)
+  #always include "index" corresponding to theta, even for non-frailty models
+  nP0_tot <- sum(nP0) + 1
+  # nP0_tot <- if (object$setup$frailty == TRUE) sum(nP0) + 1 else sum(nP0)
   nP_int <- 1 + nP0_tot+nP[1]+nP[2]+nP[3]
   nP_start <- 1 + nP0_tot+nP[1]+nP[2]+nP[3] + 1
   nP_end <- nP0_tot+nP[1]+nP[2]+nP[3] + nP[4]
@@ -381,3 +393,153 @@ predict_logit <- function(object, xnew=NULL, alpha = 0.05, ...) {
   names(out_vec) <- c("p","LL","UL")
   out_vec
 }
+
+
+#' dumb little function to predict outcomes given non-terminal event timing.
+#'
+#' function predicts probabilitites
+#'
+#' @param object object fit by Bayes_Logit
+#' @param x3new,xDnew new matrix of values at which to predict
+#' @param alpha significance level for credible interval
+#' @param tseq sequence of values at which to make predictions
+#' @param type conditional or marginal
+#' @param out format for output
+#' @param n_quad number of quadrature points for prediction
+#' @param ... extras
+#'
+#' @return a matrix
+#' @export
+predict_term <- function(object, x3new=NULL, xDnew=NULL,
+                         tseq, type = "conditional", out="long",
+                         alpha = 0.05, n_quad=15, ...){
+  # browser()
+  conf.level = alpha
+  probs <- c(0.5, conf.level/2, 1-conf.level/2)
+  yLim <- NULL
+  nChain <- object$setup$nChain
+  nP = object$setup$nCov
+  nP0 = object$setup$nCov0
+  value <- list()
+
+  if(tseq[1] == 0){ tseq <- tseq[-1]}
+  t_len <- length(tseq)
+
+  #basically, we're gonna compute two things: a vector of immediate event probs,
+  #and a matrix with rows for each sample, and columns for each future time of
+  #cumulative incidence conditional on not experiencing immediate event
+  #we can use these two things to compute what we want.
+
+  # logistic model
+
+  #always include "index" corresponding to theta, even for non-frailty models
+  nP0_tot <- sum(nP0) + 1
+  # nP0_tot <- if (object$setup$frailty == TRUE) sum(nP0) + 1 else sum(nP0)
+  # third hazard
+  nP3_start <- 1 + nP0_tot+nP[1]+nP[2]
+  nP3_end <- nP0_tot+nP[1]+nP[2]+nP[3]
+  nPD_int <- 1 + nP0_tot+nP[1]+nP[2]+nP[3]
+  nPD_start <- 2 + nP0_tot+nP[1]+nP[2]+nP[3]
+  nPD_end <- nP0_tot+nP[1]+nP[2]+nP[3] + nP[4]
+
+  LPD <- if(is.null(xDnew)) 0 else as.vector(apply(
+    X = object$samples[,,nPD_start:nPD_end], MARGIN = 2, function(x) x %*% as.vector(xDnew)))
+  expLP3 <- if(is.null(x3new)) 1 else exp(as.vector(apply(
+    X = object$samples[,,nP3_start:nP3_end], MARGIN = 2, function(x) x %*% as.vector(x3new))))
+
+  betaD0_vec <- as.vector(object$samples[,,nPD_int])
+  kappa_vec <- as.vector(object$samples[,,5])
+  alpha_vec <- as.vector(object$samples[,,6])
+
+
+  #start here and fix these
+  if(type=="conditional"){
+    S_cond_mat <- exp(-apply(as.matrix(tseq), MARGIN=1, FUN = function(x) kappa_vec * x^alpha_vec * expLP3 ))
+    p_inst_vec <- stats::plogis(q=LPD + betaD0_vec)
+    S_mat <- (1-p_inst_vec) * S_cond_mat
+    F_mat <- (1-p_inst_vec) * (1-S_cond_mat)
+    CIF_mat <- p_inst_vec + (1-p_inst_vec) * (1-S_cond_mat)
+  } else{
+    S_cond_func <- function(t,kappa_vec,alpha_vec,expLP3,theta_vec,gh_node){
+      exp(-kappa_vec * t^alpha_vec * expLP3 * exp(gh_node * sqrt(2 * theta_vec)))
+    }
+    p_cond_func <- function(betaD0_vec,LPD,theta_vec,gh_node){
+      stats::plogis(q=LPD + betaD0_vec + gh_node * sqrt(2*theta_vec))
+    }
+    S_func <- function(t,kappa_vec,alpha_vec,expLP3,betaD0_vec,LPD,theta_vec,gh_node){
+      (1-p_cond_func(betaD0_vec,LPD,theta_vec,gh_node)) *
+        S_cond_func(t,kappa_vec,alpha_vec,expLP3,theta_vec,gh_node)
+    }
+    F_func <- function(t,kappa_vec,alpha_vec,expLP3,betaD0_vec,LPD,theta_vec,gh_node){
+      (1-p_cond_func(betaD0_vec,LPD,theta_vec,gh_node)) *
+        (1-S_cond_func(t,kappa_vec,alpha_vec,expLP3,theta_vec,gh_node))
+    }
+    CIF_func <- function(t,kappa_vec,alpha_vec,expLP3,betaD0_vec,LPD,theta_vec,gh_node){
+      p_cond_func(betaD0_vec,LPD,theta_vec,gh_node) +
+        (1-p_cond_func(betaD0_vec,LPD,theta_vec,gh_node)) *
+        (1-S_cond_func(t,kappa_vec,alpha_vec,expLP3,theta_vec,gh_node))
+    }
+
+    theta_vec <- as.vector(object$samples[,,7])
+    gh_nodes <- get_ghquad_pointsweights(n_quad=n_quad)$points
+    gh_weights <- get_ghquad_pointsweights(n_quad=n_quad)$weights
+    S_cond_mat <- S_mat <- F_mat <- CIF_mat <-
+      matrix(data = 0, nrow=length(theta_vec), ncol=length(tseq))
+    p_inst_vec <- numeric(length(theta_vec))
+    for(x in 1:n_quad){
+      S_cond_mat <- S_cond_mat + gh_weights[x] / sqrt(pi) *
+        apply(as.matrix(tseq), MARGIN=1,
+          FUN = S_cond_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
+                  expLP3=expLP3,theta_vec=theta_vec,gh_node=gh_nodes[x])
+      p_inst_vec <- p_inst_vec + gh_weights[x] / sqrt(pi) *
+        p_cond_func(betaD0_vec = betaD0_vec,LPD = LPD,theta_vec = theta_vec,gh_node = gh_nodes[x])
+      S_mat <- S_mat + gh_weights[x] / sqrt(pi) *
+        apply(as.matrix(tseq), MARGIN=1,
+              FUN = S_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
+              expLP3=expLP3,betaD0_vec = betaD0_vec,LPD = LPD,
+              theta_vec=theta_vec,gh_node=gh_nodes[x])
+      F_mat <- F_mat + gh_weights[x] / sqrt(pi) *
+        apply(as.matrix(tseq), MARGIN=1,
+              FUN = F_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
+              expLP3=expLP3,betaD0_vec = betaD0_vec,LPD = LPD,
+              theta_vec=theta_vec,gh_node=gh_nodes[x])
+      CIF_mat <- CIF_mat + gh_weights[x] / sqrt(pi) *
+        apply(as.matrix(tseq), MARGIN=1,
+              FUN = CIF_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
+              expLP3=expLP3,betaD0_vec = betaD0_vec,LPD = LPD,
+              theta_vec=theta_vec,gh_node=gh_nodes[x])
+    }
+  }
+
+  #equivalent to what is reported in the baseline plots
+  p_inst_out <- mean(p_inst_vec)
+  S_cond_out <- apply(X = S_cond_mat,MARGIN = 2,FUN = mean)
+  S_out <- apply(X = S_mat,MARGIN = 2,FUN = mean)
+  F_out <- apply(X = F_mat,MARGIN = 2,FUN = mean)
+  CIF_out <- apply(X = CIF_mat,MARGIN = 2,FUN = mean)
+
+  #turned out that medians didn't add to 1, which was kind of a bummer!
+  # p_inst_out <- stats::quantile(p_inst_vec,mean)
+  # S_cond_out <- t(apply(X = S_cond_mat,MARGIN = 2,FUN = mean, probs))
+  # S_out <- t(apply(X = S_mat,MARGIN = 2,FUN = stats::quantile, probs))
+  # F_out <- t(apply(X = F_mat,MARGIN = 2,FUN = stats::quantile, probs))
+  # CIF_out <- t(apply(X = CIF_mat,MARGIN = 2,FUN = stats::quantile, probs))
+  if(out=="simple"){
+    out_mat <- cbind(p_inst_out,F_out,S_out)
+    # out_mat <- cbind(p_inst_out[1],F_out[,1],S_out[,1])
+    colnames(out_mat) <- c("p_both_inst","p_both_noinst","p_ntonly")
+    out_mat
+  } else{
+    # out_mat <- cbind(p_inst=p_inst_out,F=F_out,S=S_out,S_cond=S_cond_out,CIF=CIF_out)
+
+    # names(p_inst_out) <- c("p_inst","p_inst_LL","p_inst_UL")
+    # colnames(S_cond_out) <- c("S_cond","S_cond_LL","S_cond_UL")
+    # colnames(S_out) <- c("S","S_LL","S_UL")
+    # colnames(F_out) <- c("F","F_LL","F_UL")
+    # colnames(CIF_out) <- c("CIF","CIF_LL","CIF_UL")
+    list(tseq=tseq,p_inst=p_inst_out,
+         S_cond=S_cond_out,S=S_out,F=F_out,CIF=CIF_out)
+  }
+
+}
+

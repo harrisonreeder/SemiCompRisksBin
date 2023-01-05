@@ -13,7 +13,9 @@ Bayes_SCR(
   mcmcParams,
   n_chains,
   start_mat = NULL,
-  frail_path = NULL
+  frailty = TRUE,
+  frail_path = NULL,
+  logLHi_path = NULL
 )
 }
 \arguments{
@@ -33,7 +35,12 @@ Bayes_SCR(
 
 \item{start_mat}{a matrix of start values, with each column corresponding to a chain. If null, n_chains sets number of chains}
 
-\item{frail_path}{a string path to a folder that will be created to write the gamma frailties to file}
+\item{frailty}{Boolean indicating whether a gamma distributed subject-specific frailty should
+be included.}
+
+\item{frail_path}{filepath for where to write frailty output}
+
+\item{logLHi_path}{filepath for where to write individual likelihood contribution output}
 }
 \value{
 a list with outputs
