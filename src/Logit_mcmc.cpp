@@ -51,7 +51,7 @@ Rcpp::List Logitmcmc_PG(const arma::vec& y, const arma::mat& Xmat,
     accept_beta++; //this is dumb but it's a holdover from MH algorithm
 
     /* Storing posterior samples */
-    if( ( (M+1) % thin ) == 0 && (M+1) > n_burnin){
+    if( ( (M+1) % thin ) == 0 & (M+1) > n_burnin){
       StoreInx = (M+1 - n_burnin)/thin;
       sample_beta.col(StoreInx - 1) = beta;
     }

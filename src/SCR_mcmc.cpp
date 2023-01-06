@@ -14,66 +14,39 @@ double logsumexpnew(double x,double y){
   return c + log(exp(x-c) + exp(y-c));
 }
 
-void Logit_update_beta_frail(arma::vec& beta, arma::vec& eta, const arma::mat& Xmat,
-                             const arma::vec& frail, const arma::vec& mean_const,
-                             const arma::vec& P0diag, int& accept_beta){
 
-  int n = Xmat.n_rows;
-  int p = Xmat.n_cols;
-  //initialize starting values
-  arma::vec omega = arma::ones(n);
-  arma::vec beta_mean = arma::zeros(p);
-  arma::mat beta_var = arma::eye(p,p);
-  arma::mat beta_prec = arma::eye(p,p);
-
-  //draw auxiliary omega variables
-  for(int i = 0; i < n; i++){
-    omega(i) = rpg1z_devroye(eta(i) + log(frail(i))); //log-frailty included in ith linear predictor
-  }
-
-  //compute mean and variance vectors for beta draw
-  beta_prec = Xmat.t() * (Xmat.each_col() % omega);
-  beta_prec.diag() = beta_prec.diag() + P0diag;
-  //beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega));
-  //beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega) + P0); //if we had a prior P0
-  beta_var = inv_sympd(beta_prec);
-  beta_mean = beta_var * (mean_const - Xmat.t() * (omega % arma::log(frail)));
-
-  //draw beta (inplace)
-  mvrnorm_inplace(beta,beta_mean,beta_var);
-  //update values
-  eta = Xmat * beta;
-  accept_beta++;
-}
+// UNIVARIATE FUNCTIONS FOR WEIBULL PARAMETRIC MODEL
+// parameterized using positive-constrained inputs alpha and kappa
 
 
-
-
-
-
-
+//LOG-LIKELIHOOD
 
 double logLikWB_uni(const arma::vec& y, const arma::uvec& delta,
-                     double alpha, double kappa,
-                     const arma::vec& eta, const arma::vec& frail){
+                    double alpha, double kappa,
+                    const arma::vec& eta, const arma::vec& frail){
   //delta * (log lambda) + log(survival)
   double obj_val = arma::accu( delta % (log(alpha) + log(kappa) + (alpha - 1) * arma::log(y)
-                                        + eta + arma::log(frail))
-                                - ( kappa * arma::pow(y,alpha) ) % arma::exp(eta) % frail );
-  return(obj_val);
+                                          + eta + arma::log(frail))
+                                 - ( kappa * arma::pow(y,alpha) ) % arma::exp(eta) % frail );
+                                 return(obj_val);
 }
 
 double logLikWB_uni_i(const double& yi, const int& deltai,
-                    double alpha, double kappa,
-                    const double& etai, const double& fraili){
+                      double alpha, double kappa,
+                      const double& etai, const double& fraili){
   //delta * (log lambda) + log(survival)
   double obj_val = - ( kappa * pow(yi,alpha) ) * exp(etai) * fraili ;
   if(deltai==1){
     obj_val += log(alpha) + log(kappa) + (alpha - 1) * log(yi)
-                + etai + log(fraili);
+    + etai + log(fraili);
   }
   return(obj_val);
 }
+
+
+
+
+// PARAMETER UPDATES
 
 
 
@@ -150,6 +123,7 @@ void Bweib_update_kappa(const arma::vec& eta, double &alpha, double &kappa,
 }
 
 
+//FITTING FUNCTION
 
 
 // [[Rcpp::export]]
@@ -248,7 +222,7 @@ Rcpp::List WeibUnimcmc(const arma::vec &y, const arma::uvec &delta,
     }
 
     // Storing posterior samples
-    if( ( (M+1) % thin ) == 0 && (M+1) > n_burnin)
+    if( ( (M+1) % thin ) == 0 & (M+1) > n_burnin)
     {
       StoreInx = (M+1 - n_burnin)/thin;
 
@@ -278,6 +252,11 @@ Rcpp::List WeibUnimcmc(const arma::vec &y, const arma::uvec &delta,
 
 
 
+// NEXT, FIT A STANDARD BAYESIAN ILLNESS-DEATH MODEL (WEIBULL, SEMI-MARKOV)
+
+//UPDATES FOR EACH BASELINE AND FOR BETAS WILL LEVERAGE UNIVARIATE UPDATES ABOVE
+
+//UPDATES FOR FRAILTIES UNDER GAMMA DISTRIBUTION
 
 void BweibScrSM_update_theta_gamma(double &theta, const arma::vec &frail,
                                    const double &mhProp_theta_var,
@@ -329,8 +308,6 @@ void BweibScrSM_update_theta_gamma(double &theta, const arma::vec &frail,
       return;
 }
 
-
-
 void BweibScrSM_update_frail_gamma(arma::vec &frail, arma::vec &frail_sm, const double &theta,
                              const arma::vec &eta1, const arma::vec &eta2, const arma::vec &eta3,
                              const double &kappa1, const double &alpha1,
@@ -340,7 +317,7 @@ void BweibScrSM_update_frail_gamma(arma::vec &frail, arma::vec &frail_sm, const 
                              const arma::uvec &sm_ind, const arma::uvec &sm_ind_long,
                              const arma::uvec &delta1, const arma::uvec &delta1noD,
                              const arma::uvec &delta_cr,
-                             const arma::uvec &delta_sm, int &accept_frail,
+                             const arma::uvec &delta_sm, arma::vec &accept_frail,
                              double &curr_loglik1, double &curr_loglik_cr, double &curr_loglik_sm){
   int n = y1.n_rows;
   double temp, temp2;
@@ -368,9 +345,13 @@ void BweibScrSM_update_frail_gamma(arma::vec &frail, arma::vec &frail_sm, const 
   curr_loglik1 = logLikWB_uni(y1, delta1, alpha1, kappa1, eta1, frail);
   curr_loglik_cr = logLikWB_uni(y1, delta_cr, alpha2, kappa2, eta2, frail);
   curr_loglik_sm = logLikWB_uni(y_sm, delta_sm, alpha3, kappa3, eta3, frail_sm);
-  accept_frail++;
+  accept_frail(0) = accept_frail(0) + 1;
 }
 
+
+
+
+//UPDATES FOR FRAILTIES UNDER LOG-NORMAL DISTRIBUTION
 
 void BweibScrSM_update_theta_ln(double &theta, const arma::vec &frail,
                                 const double &theta_a, const double &theta_b,
@@ -425,83 +406,29 @@ void BweibScrSM_update_frail_ln(arma::vec &frail, arma::vec &frail_sm, const dou
   curr_loglik_sm = logLikWB_uni(y_sm, delta_sm, alpha3, kappa3, eta3, frail_sm);
 }
 
-void BweibScrSMlogit_update_frail_ln(arma::vec &frail, arma::vec &frail_sm, arma::vec &frailD, const double &theta,
-                                const arma::vec &eta1, const arma::vec &eta2, const arma::vec &eta3, const arma::vec &etaD,
-                                const double &kappa1, const double &alpha1,
-                                const double &kappa2, const double &alpha2,
-                                const double &kappa3, const double &alpha3,
-                                const arma::vec &y1, const arma::vec &y_sm,
-                                const arma::uvec &delta1, const arma::uvec &delta1noD,
-                                const arma::uvec &delta_cr, const arma::uvec &delta_sm,
-                                const arma::uvec &sm_ind, const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long,
-                                const double& frail_prop_var, arma::vec &accept_frail,
-                                double &curr_loglik1, double &curr_loglik_cr, double &curr_loglik_sm){
-  int n = y1.n_rows;
-  double logliki,logliki_prop,fraili_prop,logprior,logprior_prop, logR;
-  for(int i = 0; i < n; i++){
-    //frail is on positives, so normal is drawing the log-frailty, then we exponentiate
-    fraili_prop = exp(R::rnorm(log(frail(i)), sqrt(frail_prop_var)));
 
-    logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), frail(i))
-      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
-    logliki_prop = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), fraili_prop)
-      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), fraili_prop);
-    if(delta1(i)>0){ //nonterminal event has occurred
-      //I'm writing binary log-likelihood contribution as in
-      //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
-      logliki += -log1p( exp(etaD(delta1_ind_long(i)) + log(frail(i))) );
-      logliki_prop += -log1p( exp(etaD(delta1_ind_long(i)) + log(fraili_prop)) );
-      if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
-        logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
-                                       alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
-        logliki_prop += logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
-                                       alpha3, kappa3, eta3(sm_ind_long(i)), fraili_prop);
-      } else{ //then non-terminal event has occurred followed by immediate death
-        //etaD cancels out from these, so just add the log-frailties
-        logliki += log(frail(i));
-        logliki_prop += log(fraili_prop);
-      }
-    }
 
-    logprior = R::dnorm(log(frail(i)), 0, sqrt(theta), 1);
-    logprior_prop = R::dnorm(log(fraili_prop), 0, sqrt(theta), 1);
-    logR = logliki_prop - logliki + logprior_prop - logprior;
-    if( log(R::unif_rand()) < logR ){
-      frail(i) = fraili_prop;
-      accept_frail(i) = accept_frail(i) + 1;
-    }
-  }
 
-  //Rcpp::Rcout << "actually did all the frailty updates!" << "\n";
 
-  frailD = frail( arma::find(delta1) );
-  frail_sm = frail( sm_ind );
-
-  //Rcpp::Rcout << "subsetted the frailties!" << "\n";
-
-  curr_loglik1 = logLikWB_uni(y1, delta1, alpha1, kappa1, eta1, frail);
-  curr_loglik_cr = logLikWB_uni(y1, delta_cr, alpha2, kappa2, eta2, frail);
-  curr_loglik_sm = logLikWB_uni(y_sm, delta_sm, alpha3, kappa3, eta3, frail_sm);
-}
 
 //function to just compute the likelihood contributions of every subject in place
 
 void BweibScrSM_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
-                                const arma::vec &eta1, const arma::vec &eta2,
-                                const arma::vec &eta3,
-                                const double &kappa1, const double &alpha1,
-                                const double &kappa2, const double &alpha2,
-                                const double &kappa3, const double &alpha3,
-                                const arma::vec &y1, const arma::vec &y_sm,
-                                const arma::uvec &delta1, const arma::uvec &delta1noD,
-                                const arma::uvec &delta_cr, const arma::uvec &delta_sm,
-                                const arma::uvec &sm_ind_long){
+                          const arma::vec &eta1, const arma::vec &eta2,
+                          const arma::vec &eta3,
+                          const double &kappa1, const double &alpha1,
+                          const double &kappa2, const double &alpha2,
+                          const double &kappa3, const double &alpha3,
+                          const arma::vec &y1, const arma::vec &y_sm,
+                          const arma::uvec &delta1, const arma::uvec &delta1noD,
+                          const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                          const arma::uvec &sm_ind_long){
   int n = y1.n_rows;
   double logliki;
   for(int i = 0; i < n; i++){
     //frail is on positives, so normal is drawing the log-frailty
     logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), frail(i))
-      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
+    + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
     if(delta1noD(i)>0){ //if the non-terminal event has occurred
       logliki += logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
                                 alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
@@ -511,48 +438,18 @@ void BweibScrSM_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
   }
 }
 
-void BweibScrSMlogit_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
+
+void BweibScrSM_logLH_marg_vec(arma::vec &logLH_marg_vec,
                                const arma::vec &eta1, const arma::vec &eta2,
-                               const arma::vec &eta3, const arma::vec &etaD,
+                               const arma::vec &eta3,
                                const double &kappa1, const double &alpha1,
                                const double &kappa2, const double &alpha2,
-                               const double &kappa3, const double &alpha3,
+                               const double &kappa3, const double &alpha3, const double &theta,
                                const arma::vec &y1, const arma::vec &y_sm,
                                const arma::uvec &delta1, const arma::uvec &delta1noD,
                                const arma::uvec &delta_cr, const arma::uvec &delta_sm,
-                               const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long){
-  int n = y1.n_rows;
-  double logliki;
-  for(int i = 0; i < n; i++){
-    logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), frail(i))
-      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
-    if(delta1(i)>0){ //nonterminal event has occurred
-      //I'm writing binary log-likelihood contribution as in
-      //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
-      logliki += -log1p( exp(etaD(delta1_ind_long(i)) + log(frail(i))) );
-      if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
-        logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
-                                       alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
-      } else{ //then non-terminal event has occurred followed by immediate death
-        logliki += etaD(delta1_ind_long(i)) + log(frail(i));
-      }
-    }
-    //update ith contribution
-    logLH_vec(i) = logliki;
-  }
-}
-
-void BweibScrSM_logLH_marg_vec(arma::vec &logLH_marg_vec,
-                          const arma::vec &eta1, const arma::vec &eta2,
-                          const arma::vec &eta3,
-                          const double &kappa1, const double &alpha1,
-                          const double &kappa2, const double &alpha2,
-                          const double &kappa3, const double &alpha3, const double &theta,
-                          const arma::vec &y1, const arma::vec &y_sm,
-                          const arma::uvec &delta1, const arma::uvec &delta1noD,
-                          const arma::uvec &delta_cr, const arma::uvec &delta_sm,
-                          const arma::uvec &sm_ind_long,
-                          const arma::vec &gh_nodes, const arma::vec &gh_weights){
+                               const arma::uvec &sm_ind_long,
+                               const arma::vec &gh_nodes, const arma::vec &gh_weights){
   int n = y1.n_rows;
   double logliki, logliki_marg, logfrail;
 
@@ -569,7 +466,7 @@ void BweibScrSM_logLH_marg_vec(arma::vec &logLH_marg_vec,
       logfrail = gh_nodes_adj(j);
 
       logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), exp(logfrail))
-            + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), exp(logfrail));
+        + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), exp(logfrail));
       if(delta1noD(i)>0){ //if the non-terminal event has occurred
         logliki += logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
                                   alpha3, kappa3, eta3(sm_ind_long(i)), exp(logfrail));
@@ -587,61 +484,6 @@ void BweibScrSM_logLH_marg_vec(arma::vec &logLH_marg_vec,
 }
 
 
-void BweibScrSMlogit_logLH_marg_vec(arma::vec &logLH_marg_vec,
-                               const arma::vec &eta1, const arma::vec &eta2,
-                               const arma::vec &eta3, const arma::vec &etaD,
-                               const double &kappa1, const double &alpha1,
-                               const double &kappa2, const double &alpha2,
-                               const double &kappa3, const double &alpha3, const double &theta,
-                               const arma::vec &y1, const arma::vec &y_sm,
-                               const arma::uvec &delta1, const arma::uvec &delta1noD,
-                               const arma::uvec &delta_cr, const arma::uvec &delta_sm,
-                               const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long,
-                               const arma::vec &gh_nodes, const arma::vec &gh_weights){
-  int n = y1.n_rows;
-  double logliki, logliki_marg, logfrail;
-
-  //nodes are scaled by sqrt(2) * sigma * x + mu, but here sigma = sqrt(theta) and mu=0
-  arma::vec gh_nodes_adj = sqrt(theta * 2) * gh_nodes;
-  //note in gauss-hermite derivation there's an extra pi^{-.5} to fold into weights
-  arma::vec log_gh_weights_adj = arma::log(gh_weights) - 0.5 * log(Pi);
-
-  //loop through subjects
-  for(int i = 0; i < n; i++){
-    logliki_marg = 0;
-
-    //loop through nodes
-    for(int j = 0; j < gh_nodes.n_rows; j++){
-      logfrail = gh_nodes_adj(j);
-
-      logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), exp(logfrail))
-      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), exp(logfrail));
-      if(delta1(i)>0){ //nonterminal event has occurred
-        //I'm writing binary log-likelihood contribution as in
-        //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
-        logliki += -log1p( exp(etaD(delta1_ind_long(i)) + logfrail) );
-        if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
-          logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
-                                         alpha3, kappa3, eta3(sm_ind_long(i)), exp(logfrail));
-        } else{ //then non-terminal event has occurred followed by immediate death
-          logliki += etaD(delta1_ind_long(i)) + logfrail;
-        }
-      }
-
-      //now to accumulate the result using logsumexp trick
-      //log Lmarg = log( sum_j( exp( log w_j + log Lcond_j ) ) )
-      if(j == 0){
-        logliki_marg = logliki + log_gh_weights_adj(j);
-      } else{
-        logliki_marg = logsumexpnew(logliki_marg, logliki + log_gh_weights_adj(j));
-      }
-    }
-    //update ith contribution
-    logLH_marg_vec(i) = logliki_marg;
-  }
-
-}
-
 
 
 
@@ -649,41 +491,42 @@ void BweibScrSMlogit_logLH_marg_vec(arma::vec &logLH_marg_vec,
 
 // [[Rcpp::export]]
 void WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
-                       const arma::uvec &delta1, const arma::uvec &delta1noD,
-                       const arma::uvec &delta_cr, const arma::uvec &delta_sm,
-                       const arma::mat &Xmat1, const arma::mat &Xmat2,
-                       const arma::mat &Xmat3,
-                       const arma::vec &hyper_vec,
-                       const arma::vec &tuning_vec,
-                       const arma::vec &start_vec,
-                       arma::vec &sample_alpha1,
-                       arma::vec &sample_alpha2,
-                       arma::vec &sample_alpha3,
-                       arma::vec &sample_kappa1,
-                       arma::vec &sample_kappa2,
-                       arma::vec &sample_kappa3,
-                       arma::mat &sample_beta1,
-                       arma::mat &sample_beta2,
-                       arma::mat &sample_beta3,
-                       arma::mat &sample_frail,
-                       arma::vec &sample_theta,
-                       arma::vec &accept_base,
-                       arma::vec &accept_frail,
-                       arma::vec &accept_beta1,
-                       arma::vec &accept_beta2,
-                       arma::vec &accept_beta3,
-                       arma::vec &LH_marg_mean_vec,
-                       arma::vec &invLH_marg_mean_vec,
-                       arma::vec &sample_logLH_marg,
-                       arma::mat &sample_logLHi_marg,
-                       arma::vec &LH_mean_vec,
-                       arma::vec &invLH_mean_vec,
-                       arma::vec &sample_logLH,
-                       arma::mat &sample_logLHi,
-                       arma::vec &move_vec,
-                       int n_burnin, int n_sample, int thin, int frail_ind,
-                       int nGam_save, int nlogLHi_save,
-                       const arma::vec &gh_nodes, const arma::vec &gh_weights){
+                 const arma::uvec &delta1, const arma::uvec &delta1noD,
+                 const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                 const arma::mat &Xmat1, const arma::mat &Xmat2,
+                 const arma::mat &Xmat3,
+                 const arma::vec &hyper_vec,
+                 const arma::vec &tuning_vec,
+                 const arma::vec &start_vec,
+                 arma::vec &sample_alpha1,
+                 arma::vec &sample_alpha2,
+                 arma::vec &sample_alpha3,
+                 arma::vec &sample_kappa1,
+                 arma::vec &sample_kappa2,
+                 arma::vec &sample_kappa3,
+                 arma::mat &sample_beta1,
+                 arma::mat &sample_beta2,
+                 arma::mat &sample_beta3,
+                 arma::mat &sample_frail,
+                 arma::vec &sample_theta,
+                 arma::vec &accept_base,
+                 arma::vec &accept_frail,
+                 arma::vec &accept_beta1,
+                 arma::vec &accept_beta2,
+                 arma::vec &accept_beta3,
+                 arma::vec &LH_marg_mean_vec,
+                 arma::vec &invLH_marg_mean_vec,
+                 arma::vec &sample_logLH_marg,
+                 arma::mat &sample_logLHi_marg,
+                 arma::vec &LH_mean_vec,
+                 arma::vec &invLH_mean_vec,
+                 arma::vec &sample_logLH,
+                 arma::mat &sample_logLHi,
+                 arma::vec &move_vec,
+                 int n_burnin, int n_sample, int thin, int frail_ind,
+                 const std::string frail_dist,
+                 int nGam_save, int nlogLHi_save,
+                 const arma::vec &gh_nodes, const arma::vec &gh_weights){
 
   //I'm trying something new, which is explicitly passing in data as three sets
   //of vectors, corresponding with the three transitions...
@@ -890,29 +733,33 @@ void WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
       move_vec(M) = 6;
       // Rcpp::Rcout << "updating frailties... " << "\n";
 
+      if (frail_dist.compare("gamma") == 0){
       //This is the update for gamma-distributed frailties
-      // BweibScrSM_update_frail_gamma(frail, frail_sm, theta, eta1, eta2, eta3,
-      //                               kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
-      //                               y1, y_sm, sm_ind, sm_ind_long,
-      //                               delta1, delta1noD, delta_cr, delta_sm, accept_frail,
-      //                               curr_loglik1, curr_loglik_cr, curr_loglik_sm);
-
-      //This is the update for lognormal-distributed frailties
-      BweibScrSM_update_frail_ln(frail, frail_sm, theta, eta1, eta2, eta3,
+      BweibScrSM_update_frail_gamma(frail, frail_sm, theta, eta1, eta2, eta3,
                                     kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
-                                    y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
-                                    sm_ind, sm_ind_long, frail_prop_var, accept_frail,
+                                    y1, y_sm, sm_ind, sm_ind_long,
+                                    delta1, delta1noD, delta_cr, delta_sm, accept_frail,
                                     curr_loglik1, curr_loglik_cr, curr_loglik_sm);
+      } else {
+        //This is the update for lognormal-distributed frailties
+        BweibScrSM_update_frail_ln(frail, frail_sm, theta, eta1, eta2, eta3,
+                                   kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
+                                   y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                                   sm_ind, sm_ind_long, frail_prop_var, accept_frail,
+                                   curr_loglik1, curr_loglik_cr, curr_loglik_sm);
+      }
 
-    // Rcpp::Rcout << "updated frail: " << frail(arma::span(0,10)) << "\n";
+      // Rcpp::Rcout << "updated frail: " << frail(arma::span(0,10)) << "\n";
     } else if(move_unit < cumprobs[7]){ //theta (frailty variance)
       move_vec(M) = 7;
 
+      if (frail_dist.compare("gamma") == 0){
       //This is update for gamma-distributed frailty variance
-      //BweibScrSM_update_theta_gamma(theta, frail, mhProp_theta_var, theta_a, theta_b, accept_theta);
-
-      //This is update for lognormal distributed frailty variance
-      BweibScrSM_update_theta_ln(theta, frail, theta_a, theta_b, accept_theta);
+      BweibScrSM_update_theta_gamma(theta, frail, mhProp_theta_var, theta_a, theta_b, accept_theta);
+      } else {
+        //This is update for lognormal distributed frailty variance
+        BweibScrSM_update_theta_ln(theta, frail, theta_a, theta_b, accept_theta);
+      }
 
       // Rcpp::Rcout << "updated theta: " << theta << "\n";
     } else if(move_unit < cumprobs[8]){ //beta1
@@ -933,7 +780,7 @@ void WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
     }
 
     // Storing posterior samples
-    if( ( (M+1) % thin ) == 0 && (M+1) > n_burnin) {
+    if( ( (M+1) % thin ) == 0 & (M+1) > n_burnin) {
       StoreInx = (M+1 - n_burnin)/thin;
 
       sample_alpha1(StoreInx - 1) = alpha1;
@@ -954,9 +801,9 @@ void WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
         }
         // Rcpp::Rcout << "iter: " << M << "\n";
         BweibScrSM_logLH_marg_vec(logLH_marg_vec, eta1, eta2, eta3,
-                                   kappa1, alpha1, kappa2, alpha2, kappa3, alpha3, theta,
-                                   y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
-                                   sm_ind_long, gh_nodes, gh_weights);
+                                  kappa1, alpha1, kappa2, alpha2, kappa3, alpha3, theta,
+                                  y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                                  sm_ind_long, gh_nodes, gh_weights);
 
         //store overall (marginalized) log likelihood sample
         sample_logLH_marg(StoreInx - 1) = arma::accu(logLH_marg_vec);
@@ -970,9 +817,9 @@ void WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
 
       //deviance information (might be better to compute "marginal" version here, millar 2009)
       BweibScrSM_logLH_vec(logLH_vec, frail, eta1, eta2, eta3,
-                            kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
-                            y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
-                            sm_ind_long);
+                           kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
+                           y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                           sm_ind_long);
 
       if(nlogLHi_save>0){
         sample_logLHi.col(StoreInx - 1) = logLH_vec.head(nlogLHi_save);
@@ -1002,6 +849,202 @@ void WeibSCRmcmc(const arma::vec &y1, const arma::vec &y_sm,
   return;
 
 }
+
+
+
+
+
+
+
+// NOW, MODEL THAT ADDITIONALLY INCLUDES LOGIT SUBMODEL
+
+//update logistic betas conditional on a vector of frailty values
+
+void Logit_update_beta_frail(arma::vec& beta, arma::vec& eta, const arma::mat& Xmat,
+                             const arma::vec& frail, const arma::vec& mean_const,
+                             const arma::vec& P0diag, int& accept_beta){
+
+  int n = Xmat.n_rows;
+  int p = Xmat.n_cols;
+  //initialize starting values
+  arma::vec omega = arma::ones(n);
+  arma::vec beta_mean = arma::zeros(p);
+  arma::mat beta_var = arma::eye(p,p);
+  arma::mat beta_prec = arma::eye(p,p);
+
+  //draw auxiliary omega variables
+  for(int i = 0; i < n; i++){
+    omega(i) = rpg1z_devroye(eta(i) + log(frail(i))); //log-frailty included in ith linear predictor
+  }
+
+  //compute mean and variance vectors for beta draw
+  beta_prec = Xmat.t() * (Xmat.each_col() % omega);
+  beta_prec.diag() = beta_prec.diag() + P0diag;
+  //beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega));
+  //beta_var = inv_sympd(Xmat.t() * (Xmat.each_col() % omega) + P0); //if we had a prior P0
+  beta_var = inv_sympd(beta_prec);
+  beta_mean = beta_var * (mean_const - Xmat.t() * (omega % arma::log(frail)));
+
+  //draw beta (inplace)
+  mvrnorm_inplace(beta,beta_mean,beta_var);
+  //update values
+  eta = Xmat * beta;
+  accept_beta++;
+}
+
+
+
+
+
+void BweibScrSMlogit_update_frail_ln(arma::vec &frail, arma::vec &frail_sm, arma::vec &frailD, const double &theta,
+                                const arma::vec &eta1, const arma::vec &eta2, const arma::vec &eta3, const arma::vec &etaD,
+                                const double &kappa1, const double &alpha1,
+                                const double &kappa2, const double &alpha2,
+                                const double &kappa3, const double &alpha3,
+                                const arma::vec &y1, const arma::vec &y_sm,
+                                const arma::uvec &delta1, const arma::uvec &delta1noD,
+                                const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                                const arma::uvec &sm_ind, const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long,
+                                const double& frail_prop_var, arma::vec &accept_frail,
+                                double &curr_loglik1, double &curr_loglik_cr, double &curr_loglik_sm){
+  int n = y1.n_rows;
+  double logliki,logliki_prop,fraili_prop,logprior,logprior_prop, logR;
+  for(int i = 0; i < n; i++){
+    //frail is on positives, so normal is drawing the log-frailty, then we exponentiate
+    fraili_prop = exp(R::rnorm(log(frail(i)), sqrt(frail_prop_var)));
+
+    logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), frail(i))
+      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
+    logliki_prop = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), fraili_prop)
+      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), fraili_prop);
+    if(delta1(i)>0){ //nonterminal event has occurred
+      //I'm writing binary log-likelihood contribution as in
+      //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
+      logliki += -log1p( exp(etaD(delta1_ind_long(i)) + log(frail(i))) );
+      logliki_prop += -log1p( exp(etaD(delta1_ind_long(i)) + log(fraili_prop)) );
+      if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
+        logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
+                                       alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
+        logliki_prop += logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
+                                       alpha3, kappa3, eta3(sm_ind_long(i)), fraili_prop);
+      } else{ //then non-terminal event has occurred followed by immediate death
+        //etaD cancels out from these, so just add the log-frailties
+        logliki += log(frail(i));
+        logliki_prop += log(fraili_prop);
+      }
+    }
+
+    logprior = R::dnorm(log(frail(i)), 0, sqrt(theta), 1);
+    logprior_prop = R::dnorm(log(fraili_prop), 0, sqrt(theta), 1);
+    logR = logliki_prop - logliki + logprior_prop - logprior;
+    if( log(R::unif_rand()) < logR ){
+      frail(i) = fraili_prop;
+      accept_frail(i) = accept_frail(i) + 1;
+    }
+  }
+
+  //Rcpp::Rcout << "actually did all the frailty updates!" << "\n";
+
+  frailD = frail( arma::find(delta1) );
+  frail_sm = frail( sm_ind );
+
+  //Rcpp::Rcout << "subsetted the frailties!" << "\n";
+
+  curr_loglik1 = logLikWB_uni(y1, delta1, alpha1, kappa1, eta1, frail);
+  curr_loglik_cr = logLikWB_uni(y1, delta_cr, alpha2, kappa2, eta2, frail);
+  curr_loglik_sm = logLikWB_uni(y_sm, delta_sm, alpha3, kappa3, eta3, frail_sm);
+}
+
+
+void BweibScrSMlogit_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
+                               const arma::vec &eta1, const arma::vec &eta2,
+                               const arma::vec &eta3, const arma::vec &etaD,
+                               const double &kappa1, const double &alpha1,
+                               const double &kappa2, const double &alpha2,
+                               const double &kappa3, const double &alpha3,
+                               const arma::vec &y1, const arma::vec &y_sm,
+                               const arma::uvec &delta1, const arma::uvec &delta1noD,
+                               const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                               const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long){
+  int n = y1.n_rows;
+  double logliki;
+  for(int i = 0; i < n; i++){
+    logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), frail(i))
+      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), frail(i));
+    if(delta1(i)>0){ //nonterminal event has occurred
+      //I'm writing binary log-likelihood contribution as in
+      //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
+      logliki += -log1p( exp(etaD(delta1_ind_long(i)) + log(frail(i))) );
+      if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
+        logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
+                                       alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
+      } else{ //then non-terminal event has occurred followed by immediate death
+        logliki += etaD(delta1_ind_long(i)) + log(frail(i));
+      }
+    }
+    //update ith contribution
+    logLH_vec(i) = logliki;
+  }
+}
+
+void BweibScrSMlogit_logLH_marg_vec(arma::vec &logLH_marg_vec,
+                               const arma::vec &eta1, const arma::vec &eta2,
+                               const arma::vec &eta3, const arma::vec &etaD,
+                               const double &kappa1, const double &alpha1,
+                               const double &kappa2, const double &alpha2,
+                               const double &kappa3, const double &alpha3, const double &theta,
+                               const arma::vec &y1, const arma::vec &y_sm,
+                               const arma::uvec &delta1, const arma::uvec &delta1noD,
+                               const arma::uvec &delta_cr, const arma::uvec &delta_sm,
+                               const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long,
+                               const arma::vec &gh_nodes, const arma::vec &gh_weights){
+  int n = y1.n_rows;
+  double logliki, logliki_marg, logfrail;
+
+  //nodes are scaled by sqrt(2) * sigma * x + mu, but here sigma = sqrt(theta) and mu=0
+  arma::vec gh_nodes_adj = sqrt(theta * 2) * gh_nodes;
+  //note in gauss-hermite derivation there's an extra pi^{-.5} to fold into weights
+  arma::vec log_gh_weights_adj = arma::log(gh_weights) - 0.5 * log(Pi);
+
+  //loop through subjects
+  for(int i = 0; i < n; i++){
+    logliki_marg = 0;
+
+    //loop through nodes
+    for(int j = 0; j < gh_nodes.n_rows; j++){
+      logfrail = gh_nodes_adj(j);
+
+      logliki = logLikWB_uni_i(y1(i), delta1(i), alpha1, kappa1, eta1(i), exp(logfrail))
+      + logLikWB_uni_i(y1(i), delta_cr(i), alpha2, kappa2, eta2(i), exp(logfrail));
+      if(delta1(i)>0){ //nonterminal event has occurred
+        //I'm writing binary log-likelihood contribution as in
+        //slide 22 of https://www.stat.rutgers.edu/home/pingli/papers/Logit.pdf
+        logliki += -log1p( exp(etaD(delta1_ind_long(i)) + logfrail) );
+        if(delta1noD(i)>0){ //if the non-terminal event has occurred without immediate death
+          logliki +=      logLikWB_uni_i(y_sm(sm_ind_long(i)), delta_sm(sm_ind_long(i)),
+                                         alpha3, kappa3, eta3(sm_ind_long(i)), exp(logfrail));
+        } else{ //then non-terminal event has occurred followed by immediate death
+          logliki += etaD(delta1_ind_long(i)) + logfrail;
+        }
+      }
+
+      //now to accumulate the result using logsumexp trick
+      //log Lmarg = log( sum_j( exp( log w_j + log Lcond_j ) ) )
+      if(j == 0){
+        logliki_marg = logliki + log_gh_weights_adj(j);
+      } else{
+        logliki_marg = logsumexpnew(logliki_marg, logliki + log_gh_weights_adj(j));
+      }
+    }
+    //update ith contribution
+    logLH_marg_vec(i) = logliki_marg;
+  }
+
+}
+
+
+
+
 
 
 // [[Rcpp::export]]
@@ -1353,7 +1396,7 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
     }
 
     // Storing posterior samples
-    if( ( (M+1) % thin ) == 0 && (M+1) > n_burnin) {
+    if( ( (M+1) % thin ) == 0 & (M+1) > n_burnin) {
       StoreInx = (M+1 - n_burnin)/thin;
 
       sample_alpha1(StoreInx - 1) = alpha1;
@@ -1804,7 +1847,7 @@ Rcpp::List WeibSCRlogitmcmc2(const arma::vec &y1, const arma::vec &y_sm,
       }
 
       // Storing posterior samples
-      if( ( (M+1) % thin ) == 0 && (M+1) > n_burnin) {
+      if( ( (M+1) % thin ) == 0 & (M+1) > n_burnin) {
         StoreInx = (M+1 - n_burnin)/thin;
 
         sample_alpha1(StoreInx - 1) = alpha1;

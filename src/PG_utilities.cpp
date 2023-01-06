@@ -92,7 +92,7 @@ double rpg1z_devroye(double z){
   }
 }
 
-// generate multivariate normal (mu, sigma) and replacethe
+// generate multivariate normal (mu, sigma) to fill the vector x in place
 void mvrnorm_inplace(arma::vec& x, const arma::vec& mu, const arma::mat& sigma) {
   int p = x.n_rows;
   for (int i=0; i<p; i++){

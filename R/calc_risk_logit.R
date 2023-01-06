@@ -64,7 +64,7 @@ calc_risk_logit <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard, knots_list
   }
 
   #set linear predictors corresponding to each cause-specific hazard
-  if(!is.null(Xmat1) && !(ncol(Xmat1)==0)){
+  if(!is.null(Xmat1) & !(ncol(Xmat1)==0)){
     nP1 <- ncol(Xmat1)
     beta1 <- para[(1+nP0):(nP0+nP1)]
     eta1 <- as.vector(Xmat1 %*% beta1)
@@ -72,7 +72,7 @@ calc_risk_logit <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard, knots_list
     nP1 <- 0
     eta1 <- 0
   }
-  if(!is.null(Xmat2) && !(ncol(Xmat2)==0)){
+  if(!is.null(Xmat2) & !(ncol(Xmat2)==0)){
     nP2 <- ncol(Xmat2)
     beta2 <- para[(1+nP0+nP1):(nP0+nP1+nP2)]
     eta2 <- as.vector(Xmat2 %*% beta2)
@@ -80,7 +80,7 @@ calc_risk_logit <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard, knots_list
     nP2 <- 0
     eta2 <- 0
   }
-  if(!is.null(Xmat3) && !(ncol(Xmat3)==0)){
+  if(!is.null(Xmat3) & !(ncol(Xmat3)==0)){
     nP3 <- ncol(Xmat3)
     beta3 <- para[(1+nP0+nP1+nP2):(nP0+nP1+nP2+nP3)]
     eta3 <- as.vector(Xmat3 %*% beta3)
@@ -110,7 +110,7 @@ calc_risk_logit <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard, knots_list
   if(logit_ind){
     beta0D <- para[(1+nP0+nP1+nP2+nP3+n_h3_tv):(nP0+nP1+nP2+nP3+n_h3_tv+1)]
     #now, add in the component corresponding with the logit model
-    if(!is.null(XmatD) && !(ncol(XmatD)==0)){
+    if(!is.null(XmatD) & !(ncol(XmatD)==0)){
       nPD <- ncol(XmatD)
       betaD <- para[(1+nP0+nP1+nP2+nP3+n_h3_tv+1):(nP0+nP1+nP2+nP3+n_h3_tv+1+nPD)]
       etaD <- as.vector(XmatD %*% betaD)

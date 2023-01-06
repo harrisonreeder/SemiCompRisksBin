@@ -37,18 +37,20 @@ Bayes_Logit <- function(y, Xmat,
     start_mat <- matrix(stats::runif(n=n_chains*p,-0.1,0.1),nrow = p,ncol=n_chains)
   }
 
+  out_list <- list(samples = array(dim = c(n_store, n_chains, p),
+                                   dimnames = list(as.character(1:n_store),
+                                                   paste0("chain:",1:n_chains),
+                                                   rownames(start_mat))),
+                   accept = vector(mode = "list",length=n_chains),
+                   setup = list(m0=m0,P0=P0,
+                                start_mat = start_mat,
+                                mcmc_para = c(n_burnin=n_burnin,
+                                              n_sample=n_sample,thin=thin)))
+  names(out_list$accept) <- paste0("chain",1:n_chains)
+
   # #TODO: parallelize this loop (I know it can be done!)
-  out_list <- list()
-  # #generate an array to store the resulting samples
-  out_list[["samples"]] <- array(dim = c(n_store, n_chains, p),
-                                 dimnames = list(as.character(1:n_store),
-                                                 paste0("chain:",1:n_chains),
-                                                 rownames(start_mat)))
-  out_list[["accept"]] <- list()
-  # mcmcRet <- list()
   for(i in 1:n_chains){
     print(paste0("Chain: ", i))
-    #mcmcRet[[i]]     <- AFTtv_LN_mcmc( #for now, set this aside so I can test my rj version
     mcmcRet <- Logitmcmc_PG(y = y,
                          Xmat = Xmat,
                          m0 = m0, P0 = P0,
@@ -64,39 +66,6 @@ Bayes_Logit <- function(y, Xmat,
   #for now, my plan is going to be to leverage the bayesplot package to
   #make visuals
 
-  out_list[["setup"]]	<-
-  # mcmcRet[["setup"]]	<-
-    list(m0=m0,P0=P0,
-         start_mat = start_mat,
-         mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin))
-
   return(out_list)
 
-  # w.p <- matrix(as.vector(mcmcRet$samples_w), nrow=nStore, byrow=T)
-  # if(p >0){
-  #   beta.p <- matrix(as.vector(mcmcRet$samples_beta), nrow=nStore, byrow=T)
-  # } else{
-  #   beta.p <- NULL
-  # }
-  #
-  # mu.p <- matrix(as.vector(mcmcRet$samples_mu), nrow=nStore, byrow=T)
-  # sigSq.p <- matrix(as.vector(mcmcRet$samples_sigSq), nrow=nStore, byrow=T)
-  # lambdaSq.p <- matrix(as.vector(mcmcRet$samples_lambdaSq), nrow=nStore, byrow=T)
-  #
-  # if(p >0)
-  # {
-  #   accept.beta	 <- as.vector(mcmcRet$samples_misc[1:p])
-  # }else
-  # {
-  #   accept.beta <- NULL
-  # }
-  #
-  # accept.mu	 <- as.vector(mcmcRet$samples_misc[p+1])
-  # accept.sigSq	 <- as.vector(mcmcRet$samples_misc[p+2])
-  #
-  # ret <- list(beta.p = beta.p, mu.p=mu.p, sigSq.p = sigSq.p,
-  #             accept.beta = accept.beta, accept.mu = accept.mu, accept.sigSq = accept.sigSq)
-  #
-  # class(ret) <- "BAFTtv"
-  # return(ret)
 }

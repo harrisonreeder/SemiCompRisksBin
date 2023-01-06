@@ -75,21 +75,21 @@ calc_risk <- function(para, Xmat1, Xmat2, Xmat3,hazard,knots_list=NULL,
     gamma <- rep(1,n)
   }
 
-  if(!is.null(Xmat1) && !(ncol(Xmat1)==0)){
+  if(!is.null(Xmat1) & !(ncol(Xmat1)==0)){
     nP1 <- ncol(Xmat1)
     beta1 <- para[(1+nP0):(nP0+nP1)]
     eta1 <- as.vector(Xmat1 %*% beta1)
   } else{
     nP1 <- 0; eta1 <- 0
   }
-  if(!is.null(Xmat2) && !(ncol(Xmat2)==0)){
+  if(!is.null(Xmat2) & !(ncol(Xmat2)==0)){
     nP2 <- ncol(Xmat2)
     beta2 <- para[(1+nP0+nP1):(nP0+nP1+nP2)]
     eta2 <- as.vector(Xmat2 %*% beta2)
   } else{
     nP2 <- 0; eta2 <- 0
   }
-  if(!is.null(Xmat3) && !(ncol(Xmat3)==0)){
+  if(!is.null(Xmat3) & !(ncol(Xmat3)==0)){
     nP3 <- ncol(Xmat3)
     beta3 <- para[(1+nP0+nP1+nP2):(nP0+nP1+nP2+nP3)]
     eta3 <- as.vector(Xmat3 %*% beta3)
@@ -512,7 +512,7 @@ calc_risk_term <- function(para, Xmat3,hazard,knots_list=NULL,
     beta3_tv_linear <- 0
   }
 
-  if(!is.null(Xmat3) && !(ncol(Xmat3)==0)){
+  if(!is.null(Xmat3) & !(ncol(Xmat3)==0)){
     nP3 <- ncol(Xmat3)
     beta3 <- utils::tail(para,n = nP3+n_tv)[1:nP3]
     eta3 <- as.vector(Xmat3 %*% beta3)

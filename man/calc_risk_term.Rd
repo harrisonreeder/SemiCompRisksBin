@@ -26,8 +26,6 @@ the first \eqn{k_1+k_2+k_3} elements correspond to the baseline hazard parameter
 then the \eqn{k_1+k_2+k_3+1} element corresponds to the gamma frailty log-variance parameter,
 then the last\eqn{q_1+q_2+q_3} elements correspond with the regression parameters.}
 
-\item{Xmat3}{Numeric matrices with \eqn{n} rows and \eqn{q_1,q_2,q_3} columns containing covariates.}
-
 \item{hazard}{String specifying the form of the baseline hazard.}
 
 \item{knots_list}{Used for hazard specifications besides Weibull, a

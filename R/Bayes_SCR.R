@@ -6,9 +6,11 @@
 #' @import Formula
 #' @export
 Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
-                      hyperParams, mcmcParams, n_chains, start_mat=NULL, frailty=TRUE,
+                      hyperParams, mcmcParams, n_chains, start_mat=NULL, frailty=TRUE, frail_dist="gamma",
                       frail_path=NULL, logLHi_path=NULL){
-  # browser()
+  browser()
+
+  frail_dist <- tolower(frail_dist)
 
   ##INITIALIZE DATA##
   ##*******************************##
@@ -25,7 +27,7 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
 
   #indicator for first event being non-terminal event
   delta1 <- time1[[2]]
-  #subtly different indicator for first event being non-terminal event with nonzero sojourntime after
+  #subtly different indicator for first event being non-terminal event with nonzero sojourn time after
   delta1noD <- as.numeric( delta1 & time2[[1]] - time1[[1]] > 0)
 
   #time of first event/censoring
@@ -34,9 +36,9 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
   delta_cr <- ifelse(time1[[1]] < time2[[1]], 0, time2[[2]])
 
   #time of terminal event after non-terminal event excl. obs with immediate event (sojourn time 0)
-  y_sm <- (time2[[1]] - time1[[1]])[delta1==1 & time2[[1]] - time1[[1]] > 0]
+  y_sm <- (time2[[1]] - time1[[1]])[delta1noD==1]
   #indicator of terminal event after non-terminal event excl. obs with immediate event (sojourn time 0)
-  delta_sm <- time2[[2]][delta1==1 & time2[[1]] - time1[[1]] > 0]
+  delta_sm <- time2[[2]][delta1noD==1]
 
   ymax <- max(time2[[1]])
 
@@ -51,17 +53,11 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
                                         data=data))
   #subsetted to just those who experience the non-terminal event
   Xmat3 <- as.matrix(stats::model.frame(stats::formula(form2, lhs=0, rhs=3),
-                                        data=data))[delta1==1 & time2[[1]] - time1[[1]] > 0,,drop=FALSE]
-  # Xmat3 <- as.matrix(stats::model.frame(stats::formula(form2, lhs=0, rhs=3),
-  #                                       data=data))[delta1==1,,drop=FALSE]
+                                        data=data))[delta1noD==1,,drop=FALSE]
   p1 <- ncol(Xmat1)
   p2 <- ncol(Xmat2)
   p3 <- ncol(Xmat3)
   n <- length(y1)
-
-  # survreg(formula = Surv(y1,delta1) ~ Xmat1)
-  # survreg(formula = Surv(y1,delta_cr) ~ Xmat2)
-  # survreg(formula = Surv(y_sm,delta_sm) ~ Xmat3)
 
   ####SET HYPERPARAMETERS####
   hyper_vec <- as.vector(c(hyperParams$WB$WB.ab1, hyperParams$WB$WB.ab2, hyperParams$WB$WB.ab3,
@@ -81,7 +77,6 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
   nGam_save=if(mcmcParams$storage$nGam_save <0) n else mcmcParams$storage$nGam_save
   nlogLHi_save=if(mcmcParams$storage$nlogLHi_save <0) n else mcmcParams$storage$nlogLHi_save
 
-
   n_burnin <- numReps * burninPerc
   n_sample <- numReps - n_burnin
   n_store  <- numReps/thin * (1 - burninPerc)
@@ -89,6 +84,8 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
   stopifnot(n_sample > 0)
   if(n_store %% 1 != 0){ stop("numReps * burninPerc  must be divisible by thin")}
 
+  #we're gonna write these values separately because there's so many of them
+  #so make sure there's a directory to write to.
   if(!is.null(frail_path)){
     dir.create(paste(frail_path), recursive = TRUE, showWarnings = FALSE)
   }
@@ -163,6 +160,7 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
     class = c("Bayes_HReg2", "ID", "Ind", "WB")
   )
   names(out_list$accept) <- paste0("chain",1:n_chains)
+  class(out_list) <- "Bayes_HReg2"
 
   #### RUN SAMPLER ####
   # #TODO: parallelize this loop (I know it can be done!)
@@ -243,6 +241,7 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
                                 move_vec=move_vec,
                                 n_burnin=n_burnin, n_sample=n_sample, thin=thin,
                                 frail_ind = as.integer(frailty),
+                                frail_dist = "gamma",
                                 nGam_save=nGam_save, nlogLHi_save=nlogLHi_save,
                                 gh_nodes = gh_nodes, gh_weights = gh_weights)
 
@@ -298,7 +297,6 @@ Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
     out_list$diagnostics$LPML_marg = -sum(log(apply(out_list$diagnostics$invLH_marg_mean_mat, 1, mean)))
   }
 
-  class(out_list) <- "Bayes_HReg2"
   #for now, my plan is going to be to leverage the bayesplot package to make visuals
   return(out_list)
 

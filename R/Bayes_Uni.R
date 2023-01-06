@@ -50,7 +50,6 @@ Bayes_Uni <- function(Formula, data, na.action="na.fail", subset=NULL,
   stopifnot(n_sample > 0)
   if(n_store %% 1 != 0){ stop("numReps * burninPerc  must be divisible by thin")}
 
-
   ####ASSIGN START VALUES####
 
   if(is.null(start_mat)){
@@ -60,19 +59,33 @@ Bayes_Uni <- function(Formula, data, na.action="na.fail", subset=NULL,
     rownames(start_mat) <- c("kappa","alpha",if(p>0) paste0("beta_",1:p))
   }
 
-  # #TODO: parallelize this loop (I know it can be done!)
-  out_list <- list()
-  # #generate an array to store the resulting samples
-  out_list[["samples"]] <- array(dim = c(n_store, n_chains, nrow(start_mat)),
-                                 dimnames = list(as.character(1:n_store),
-                                                 paste0("chain:",1:n_chains),
-                                                 rownames(start_mat)))
-  # out_list[["accept"]] <- list()
-  mcmcRet <- list()
+  #prepopulate the output list with all of the pieces, then just fill
+  #the sample array
+  out_list <- list(samples = array(dim = c(n_store, n_chains, nrow(start_mat)),
+                                   dimnames = list(as.character(1:n_store),
+                                                   paste0("chain:",1:n_chains),
+                                                   rownames(start_mat))),
+                   accept = vector(mode="list",length = n_chains),
+                   setup =     list(Formula=Formula,
+                                    nCov0 = 2,
+                                    nCov = p,
+                                    hyper_vec = hyper_vec, start_mat = start_mat,
+                                    tuning_vec = tuning_vec, ymax = max(y),
+                                    numReps = numReps, thin = thin, burninPerc = burninPerc,
+                                    hz.type = "Weibull", nChain = n_chains,
+                                    mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin)),
+                   class = c("Bayes_HReg2", "Surv", "Ind", "WB"),
+                   covnames = if(p>0) colnames(Xmat) else NULL)
+  names(out_list$accept) <- paste0("chain",1:n_chains)
+  class(out_list) <- "Bayes_HReg2"
+
+  #TODO: parallelize this loop (I know it can be done!)
   for(i in 1:n_chains){
     print(paste0("Chain: ", i))
     mcmcRet <- WeibUnimcmc(y, delta, Xmat, hyper_vec, tuning_vec, start_mat[,i],
                            n_burnin, n_sample, thin)
+
+    #TODO: compute likelihood components for DIC/loo metric comparison
 
     out_list[["samples"]][,i,1] <- mcmcRet[["samples"]][["kappa"]]
     out_list[["samples"]][,i,2] <- mcmcRet[["samples"]][["alpha"]]
@@ -80,24 +93,6 @@ Bayes_Uni <- function(Formula, data, na.action="na.fail", subset=NULL,
     out_list[["accept"]][[paste0("chain",i)]] <- mcmcRet$accept
   }
 
-  #for now, my plan is going to be to leverage the bayesplot package to
-  #make visuals
-
-  out_list[["setup"]]	<-
-    # mcmcRet[["setup"]]	<-
-    list(Formula=Formula,
-         nCov0 = 2,
-         nCov = p,
-         hyper_vec = hyper_vec, start_mat = start_mat,
-         tuning_vec = tuning_vec, ymax = max(y),
-         numReps = numReps, thin = thin, burninPerc = burninPerc,
-         hz.type = "Weibull", nChain = n_chains,
-         mcmc_para = c(n_burnin=n_burnin,n_sample=n_sample,thin=thin))
-  out_list$class <- c("Bayes_HReg2", "Surv", "Ind", "WB")
-  out_list$covnames <- if(p>0) colnames(Xmat) else NULL
-
-  # return(mcmcRet)
-  class(out_list) <- "Bayes_HReg2"
   return(out_list)
 
 }

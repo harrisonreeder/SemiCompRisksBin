@@ -7,10 +7,6 @@
 get_ipcw_mat(y2, delta2, t_cutoff)
 }
 \arguments{
-\item{y2}{Numeric vectors of length \eqn{n} with (possibly censored) non-terminal and terminal event times}
-
-\item{delta2}{Numeric vectors of length \eqn{n}  with indicators of 1 if the event was observed and 0 otherwise}
-
 \item{t_cutoff}{Numeric vector indicating the time(s) to compute the risk profile.}
 }
 \value{

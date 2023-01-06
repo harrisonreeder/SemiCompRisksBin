@@ -7,11 +7,7 @@
 get_ipcw_mat_logit(y2, delta1, delta2, deltaD, t_cutoff)
 }
 \arguments{
-\item{y2}{Numeric vectors of length \eqn{n} with (possibly censored) non-terminal and terminal event times}
-
-\item{delta1}{Numeric vectors of length \eqn{n}  with indicators of 1 if the event was observed and 0 otherwise}
-
-\item{delta2}{Numeric vectors of length \eqn{n}  with indicators of 1 if the event was observed and 0 otherwise}
+\item{delta1, delta2}{Numeric vectors of length \eqn{n}  with indicators of 1 if the event was observed and 0 otherwise}
 
 \item{deltaD}{indicator that is 1 if subject has delta1==1 and observed immediate event, 0 else}
 
