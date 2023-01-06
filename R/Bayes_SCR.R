@@ -8,7 +8,7 @@
 Bayes_SCR <- function(Formula, data, na.action="na.fail", subset=NULL,
                       hyperParams, mcmcParams, n_chains, start_mat=NULL, frailty=TRUE, frail_dist="gamma",
                       frail_path=NULL, logLHi_path=NULL){
-  browser()
+  # browser()
 
   frail_dist <- tolower(frail_dist)
 

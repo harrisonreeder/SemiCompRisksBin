@@ -14,6 +14,7 @@ Bayes_SCR(
   n_chains,
   start_mat = NULL,
   frailty = TRUE,
+  frail_dist = "gamma",
   frail_path = NULL,
   logLHi_path = NULL
 )
