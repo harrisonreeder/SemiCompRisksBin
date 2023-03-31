@@ -1,6 +1,7 @@
 #' Bayesian Illness-Death Model with Weibull Baselines and Semi-Markov structure
 #'
 #' @inheritParams Bayes_SCR_logit
+#' @param frail_dist string indicating if frailty should be 'gamma' or 'lognormal'
 #'
 #' @return a list with outputs
 #' @import Formula

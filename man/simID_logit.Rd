@@ -27,6 +27,8 @@ simID_logit(
   beta3tv.true = NULL,
   h3tv_degree = 3,
   anyD = TRUE,
+  D_eps = 0,
+  D_dist = "uniform",
   betaD.true = NULL,
   betaDtv.true = NULL,
   Dtv_degree = 3,

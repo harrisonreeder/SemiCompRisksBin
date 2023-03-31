@@ -10,9 +10,10 @@ calc_risk_logitbayes(
   Xmat2,
   Xmat3,
   XmatD,
-  hazard,
+  D_eps,
   t_cutoff,
   tol = 0.001,
+  hazard,
   frailty = TRUE,
   beta2frail = 1,
   beta3frail = 1,
@@ -38,11 +39,13 @@ then the last\eqn{q_1+q_2+q_3} elements correspond with the regression parameter
 
 \item{XmatD}{Numeric matrices with \eqn{n} rows and \eqn{q_1,q_2,q_3} columns containing covariates.}
 
-\item{hazard}{String specifying the form of the baseline hazard.}
+\item{D_eps}{Numeric scalar width of the "immediate event" window.}
 
 \item{t_cutoff}{Numeric vector indicating the time(s) to compute the risk profile.}
 
 \item{tol}{Numeric value for the tolerance of the numerical integration procedure.}
+
+\item{hazard}{String specifying the form of the baseline hazard.}
 
 \item{frailty}{Boolean indicating whether a gamma distributed subject-specific frailty should
 be included. Currently this must be set to TRUE.}

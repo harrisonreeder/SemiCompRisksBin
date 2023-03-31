@@ -43,7 +43,7 @@ summary.Bayes_HReg2 <- function(object, digits=3, alpha=0.05, ...) {
       colnames(output.coef) <- c("beta", "LL", "UL")
       rownames(output.coef) <- object$covnames
     }
-  } else if (object$class[2] == "IDlogit") {
+  } else if (object$class[2] %in% c("ID", "IDlogit")) {
     #theta estimates
     if(object$setup$frailty){
       tbl_theta <- raw_mat[7,prob_names,drop=FALSE]
@@ -52,17 +52,21 @@ summary.Bayes_HReg2 <- function(object, digits=3, alpha=0.05, ...) {
 
     #beta estimates
     beta.names <- unique(c(object$covnames$covNames1, object$covnames$covNames2,
-                           object$covnames$covNames3, object$covnames$covNamesD))
+                   object$covnames$covNames3,
+                   if(object$class[2]=="IDlogit") object$covnames$covNamesD))
     nP <- length(beta.names)
     output.coef <- NULL
     if(nP > 0){
-      output <- matrix(NA, nrow=nP, ncol=12,
-                       dimnames = list(beta.names, c("beta1", "LL", "UL",
-                                                     "beta2", "LL", "UL",
-                                                     "beta3", "LL", "UL",
-                                                     "betaD", "LL", "UL")))
+      ncol_temp <- if(object$class[2]=="IDlogit") 12 else 9
+      colnames_temp <- c(c("beta1", "LL", "UL",
+                           "beta2", "LL", "UL",
+                           "beta3", "LL", "UL"),
+           if(object$class[2]=="IDlogit") c("betaD", "LL", "UL"))
+      output <- matrix(NA, nrow=nP, ncol=ncol_temp,
+                       dimnames = list(beta.names, colnames_temp))
       p1 <- object$setup$nCov[1]; p2 <- object$setup$nCov[2]
-      p3 <- object$setup$nCov[3]; pDnoint <- object$setup$nCov[4] - 1
+      p3 <- object$setup$nCov[3]
+      pDnoint <- if(object$class[2]=="IDlogit") object$setup$nCov[4] - 1 else 0
       for(i in 1:nP) {
         if(p1 > 0){
           for(k in 1:p1) if(object$covnames$covNames1[k] == beta.names[i]) output[i,1:3] <- raw_mat[7 + k,prob_names]
@@ -84,14 +88,16 @@ summary.Bayes_HReg2 <- function(object, digits=3, alpha=0.05, ...) {
     bh <- log(cbind(raw_mat[1:2,],raw_mat[3:4,],raw_mat[5:6,]))
     dimnames(bh) <- list(c("Weibull: log-kappa", "Weibull: log-alpha"),
                          c("h1-PM", "LL", "UL", "h2-PM", "LL", "UL", "h3-PM", "LL", "UL"))
-    tbl_betaD0 <- raw_mat[8+p1+p2+p3,,drop=FALSE]
-    dimnames(tbl_betaD0) <- list("",c("betaD0", "LL", "UL"))
+    if(object$class[2]=="IDlogit"){
+      tbl_betaD0 <- raw_mat[8+p1+p2+p3,,drop=FALSE]
+      dimnames(tbl_betaD0) <- list("",c("betaD0", "LL", "UL"))
+    }
   }
 
   value <- list(classFit=object$class, #psrf=psrf,
                 coef=output.coef, h0=bh,
                 setup=object$setup,conf.level=conf.level,
-                if(object$class[2] == "IDlogit" & object$setup$frailty) theta=tbl_theta,
+                if(object$class[2] %in% c("ID", "IDlogit") & object$setup$frailty) theta=tbl_theta,
                 if(object$class[2] == "IDlogit") betaD0=tbl_betaD0)
   class(value) <- "summ.Bayes_HReg2"
 
@@ -316,7 +322,7 @@ predict.Bayes_HReg2 <- function(object, xnew=NULL,
     }
   }
 
-  if(object$class[2] == "IDlogit"){
+  if(object$class[2] %in% c("ID","IDlogit")){
     #mark off the correct parameter vector start and end indices (for the hazard models)
     nP0_tot <- sum(nP0) + 1 #always leave space for frailty even for non-frailty models
     # nP0_tot <- if (object$setup$frailty == TRUE) sum(nP0) + 1 else sum(nP0)
@@ -403,6 +409,7 @@ predict_logit <- function(object, xnew=NULL, alpha = 0.05, ...) {
 #' @param x3new,xDnew new matrix of values at which to predict
 #' @param alpha significance level for credible interval
 #' @param tseq sequence of values at which to make predictions
+#' @param logit_ind augmented model or standard model
 #' @param type conditional or marginal
 #' @param out format for output
 #' @param n_quad number of quadrature points for prediction
@@ -411,6 +418,7 @@ predict_logit <- function(object, xnew=NULL, alpha = 0.05, ...) {
 #' @return a matrix
 #' @export
 predict_term <- function(object, x3new=NULL, xDnew=NULL,
+                         logit_ind=TRUE, D_eps=0,
                          tseq, type = "conditional", out="long",
                          alpha = 0.05, n_quad=15, ...){
   # browser()
@@ -424,6 +432,7 @@ predict_term <- function(object, x3new=NULL, xDnew=NULL,
 
   if(tseq[1] == 0){ tseq <- tseq[-1]}
   t_len <- length(tseq)
+  tseq_D <- pmax(0, tseq-D_eps)
 
   #basically, we're gonna compute two things: a vector of immediate event probs,
   #and a matrix with rows for each sample, and columns for each future time of
@@ -438,24 +447,25 @@ predict_term <- function(object, x3new=NULL, xDnew=NULL,
   # third hazard
   nP3_start <- 1 + nP0_tot+nP[1]+nP[2]
   nP3_end <- nP0_tot+nP[1]+nP[2]+nP[3]
-  nPD_int <- 1 + nP0_tot+nP[1]+nP[2]+nP[3]
-  nPD_start <- 2 + nP0_tot+nP[1]+nP[2]+nP[3]
-  nPD_end <- nP0_tot+nP[1]+nP[2]+nP[3] + nP[4]
-
-  LPD <- if(is.null(xDnew)) 0 else as.vector(apply(
-    X = object$samples[,,nPD_start:nPD_end], MARGIN = 2, function(x) x %*% as.vector(xDnew)))
   expLP3 <- if(is.null(x3new)) 1 else exp(as.vector(apply(
     X = object$samples[,,nP3_start:nP3_end], MARGIN = 2, function(x) x %*% as.vector(x3new))))
 
-  betaD0_vec <- as.vector(object$samples[,,nPD_int])
+  if(logit_ind){
+    nPD_int <- 1 + nP0_tot+nP[1]+nP[2]+nP[3]
+    nPD_start <- 2 + nP0_tot+nP[1]+nP[2]+nP[3]
+    nPD_end <- nP0_tot+nP[1]+nP[2]+nP[3] + nP[4]
+    LPD <- if(is.null(xDnew)) 0 else as.vector(apply(
+      X = object$samples[,,nPD_start:nPD_end], MARGIN = 2, function(x) x %*% as.vector(xDnew)))
+    betaD0_vec <- as.vector(object$samples[,,nPD_int])
+  }
+
   kappa_vec <- as.vector(object$samples[,,5])
   alpha_vec <- as.vector(object$samples[,,6])
 
-
   #start here and fix these
   if(type=="conditional"){
-    S_cond_mat <- exp(-apply(as.matrix(tseq), MARGIN=1, FUN = function(x) kappa_vec * x^alpha_vec * expLP3 ))
-    p_inst_vec <- stats::plogis(q=LPD + betaD0_vec)
+    S_cond_mat <- exp(-apply(as.matrix(tseq_D), MARGIN=1, FUN = function(x) kappa_vec * x^alpha_vec * expLP3 ))
+    p_inst_vec <- if(logit_ind) stats::plogis(q=LPD + betaD0_vec) else 0
     S_mat <- (1-p_inst_vec) * S_cond_mat
     F_mat <- (1-p_inst_vec) * (1-S_cond_mat)
     CIF_mat <- p_inst_vec + (1-p_inst_vec) * (1-S_cond_mat)
@@ -464,7 +474,7 @@ predict_term <- function(object, x3new=NULL, xDnew=NULL,
       exp(-kappa_vec * t^alpha_vec * expLP3 * exp(gh_node * sqrt(2 * theta_vec)))
     }
     p_cond_func <- function(betaD0_vec,LPD,theta_vec,gh_node){
-      stats::plogis(q=LPD + betaD0_vec + gh_node * sqrt(2*theta_vec))
+      if(logit_ind) stats::plogis(q=LPD + betaD0_vec + gh_node * sqrt(2*theta_vec)) else 0
     }
     S_func <- function(t,kappa_vec,alpha_vec,expLP3,betaD0_vec,LPD,theta_vec,gh_node){
       (1-p_cond_func(betaD0_vec,LPD,theta_vec,gh_node)) *
@@ -484,27 +494,27 @@ predict_term <- function(object, x3new=NULL, xDnew=NULL,
     gh_nodes <- get_ghquad_pointsweights(n_quad=n_quad)$points
     gh_weights <- get_ghquad_pointsweights(n_quad=n_quad)$weights
     S_cond_mat <- S_mat <- F_mat <- CIF_mat <-
-      matrix(data = 0, nrow=length(theta_vec), ncol=length(tseq))
+      matrix(data = 0, nrow=length(theta_vec), ncol=length(tseq_D))
     p_inst_vec <- numeric(length(theta_vec))
     for(x in 1:n_quad){
       S_cond_mat <- S_cond_mat + gh_weights[x] / sqrt(pi) *
-        apply(as.matrix(tseq), MARGIN=1,
+        apply(as.matrix(tseq_D), MARGIN=1,
           FUN = S_cond_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
                   expLP3=expLP3,theta_vec=theta_vec,gh_node=gh_nodes[x])
       p_inst_vec <- p_inst_vec + gh_weights[x] / sqrt(pi) *
         p_cond_func(betaD0_vec = betaD0_vec,LPD = LPD,theta_vec = theta_vec,gh_node = gh_nodes[x])
       S_mat <- S_mat + gh_weights[x] / sqrt(pi) *
-        apply(as.matrix(tseq), MARGIN=1,
+        apply(as.matrix(tseq_D), MARGIN=1,
               FUN = S_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
               expLP3=expLP3,betaD0_vec = betaD0_vec,LPD = LPD,
               theta_vec=theta_vec,gh_node=gh_nodes[x])
       F_mat <- F_mat + gh_weights[x] / sqrt(pi) *
-        apply(as.matrix(tseq), MARGIN=1,
+        apply(as.matrix(tseq_D), MARGIN=1,
               FUN = F_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
               expLP3=expLP3,betaD0_vec = betaD0_vec,LPD = LPD,
               theta_vec=theta_vec,gh_node=gh_nodes[x])
       CIF_mat <- CIF_mat + gh_weights[x] / sqrt(pi) *
-        apply(as.matrix(tseq), MARGIN=1,
+        apply(as.matrix(tseq_D), MARGIN=1,
               FUN = CIF_func, kappa_vec=kappa_vec,alpha_vec=alpha_vec,
               expLP3=expLP3,betaD0_vec = betaD0_vec,LPD = LPD,
               theta_vec=theta_vec,gh_node=gh_nodes[x])
@@ -537,7 +547,7 @@ predict_term <- function(object, x3new=NULL, xDnew=NULL,
     # colnames(S_out) <- c("S","S_LL","S_UL")
     # colnames(F_out) <- c("F","F_LL","F_UL")
     # colnames(CIF_out) <- c("CIF","CIF_LL","CIF_UL")
-    list(tseq=tseq,p_inst=p_inst_out,
+    list(tseq=tseq,tseq_D=tseq_D,p_inst=p_inst_out,
          S_cond=S_cond_out,S=S_out,F=F_out,CIF=CIF_out)
   }
 

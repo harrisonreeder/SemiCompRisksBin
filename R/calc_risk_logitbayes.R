@@ -4,6 +4,7 @@
 #'
 #' @inheritParams calc_risk
 #' @param XmatD Numeric matrices with \eqn{n} rows and \eqn{q_1,q_2,q_3} columns containing covariates.
+#' @param D_eps Numeric scalar width of the "immediate event" window.
 #' @param logit_ind Boolean for whether to include logit submodel.
 #' @param logit_tv String indicating whether there is an effect of t1 on the logit model.
 #' @param logit_tv_knots for piecewise effect of t1 in h3, these are the knots at which the effect jumps
@@ -15,8 +16,9 @@
 #'   of probabilities. If Xmat has \code{n} rows, then returns an \code{n} by 4 matrix of probabilities.
 #'   If Xmat has \code{n} rows and t_cutoff is a vector of length \code{s}, then returns an \code{s} by 4 by \code{n} array.
 #' @export
-calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
-                            t_cutoff, tol=1e-3, frailty=TRUE,
+calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, D_eps,
+                            t_cutoff, tol=1e-3,
+                            hazard, frailty=TRUE,
                             beta2frail=1, beta3frail=1, betaDfrail=1, #temporary, just get them in the mix
                             type="marginal", gamma=1,model="semi-markov",
                             h3_tv="none",h3tv_knots=NULL,
@@ -222,7 +224,7 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
   #function of t1 if we pre-integrate t2 from t_cutoff to infinity
   #aka, integrand needed to generate probability of just the non-terminal event occurring by t_cutoff
   f_joint_t1_nonTerm <- switch(type,
-    marginal=function(t1,t_cutoff,index,beta3_tv_const=0,beta3_tv_lin=0, betaD_tv_const=0,betaD_tv_lin=0){
+    marginal=function(t1,t_cutoff,index,D_eps,beta3_tv_const=0,beta3_tv_lin=0, betaD_tv_const=0,betaD_tv_lin=0){
       # browser()
       temp <- 0
       for(x in 1:n_quad){
@@ -232,14 +234,14 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
           exp(-exp(gh_adj_nodes[x]) * H1_const[index] * t1^alpha1 -
                 exp(gh_adj_nodes[x] * beta2frail) * H2_const[index] * t1^alpha2 -
                 exp(gh_adj_nodes[x] * beta3frail + beta3_tv_const + beta3_tv_lin * t1) *
-                H3_const[index] * (t_cutoff - t1)^alpha3)
+                H3_const[index] * (t_cutoff - (t1+D_eps))^alpha3)
         temp <- temp + temp2 * gh_weights[x]
       }
       temp / sqrt(pi)
     },
-    conditional=function(t1,t_cutoff,index,beta3_tv_const=0,beta3_tv_lin=0, betaD_tv_const=0,betaD_tv_lin=0){
+    conditional=function(t1,t_cutoff,index,D_eps,beta3_tv_const=0,beta3_tv_lin=0, betaD_tv_const=0,betaD_tv_lin=0){
       # browser()
-      H3_temp <- H3_const[index] * (t_cutoff - t1)^alpha3 * exp(beta3_tv_const + beta3_tv_lin * t1)
+      H3_temp <- H3_const[index] * (t_cutoff - (t1+D_eps))^alpha3 * exp(beta3_tv_const + beta3_tv_lin * t1)
       #return the right value corresponding to the hazard and type
       #ASSUME SEMI-MARKOV, CONDITIONAL, AND WEIBULL
       gamma[index] * h1_const[index] * t1^alpha1_m1 *
@@ -254,7 +256,8 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
   #function of t1 if we pre-integrate t2 from t1 to t_cutoff
   #aka, integrand needed to generate probability of both events occurring by t_cutoff
   f_joint_t1_both <- switch(type,
-    marginal=function(t1,t_cutoff,index,beta3_tv_const=0,beta3_tv_lin=0,betaD_tv_const=0,betaD_tv_lin=0){
+    marginal=function(t1,t_cutoff,index,D_eps,beta3_tv_const=0,
+                      beta3_tv_lin=0,betaD_tv_const=0,betaD_tv_lin=0){
       temp <- 0
       for(x in 1:n_quad){
         temp2 <- exp(gh_adj_nodes[x]) * h1_const[index] * t1^alpha1_m1 *
@@ -263,13 +266,15 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
           exp( -exp(gh_adj_nodes[x]) * H1_const[index] * t1^alpha1 -
                  exp(gh_adj_nodes[x] * beta2frail) * H2_const[index] * t1^alpha2 ) *
           ( 1 - exp(-exp(gh_adj_nodes[x] * beta3frail + beta3_tv_const + beta3_tv_lin * t1) *
-                      H3_const[index] * (t_cutoff - t1)^alpha3))
+                      H3_const[index] * (t_cutoff - (t1+D_eps))^alpha3))
         temp <- temp + temp2 * gh_weights[x]
       }
       temp / sqrt(pi)
     },
-    conditional=function(t1,t_cutoff,index,beta3_tv_const=0,beta3_tv_lin=0,betaD_tv_const=0,betaD_tv_lin=0){
-    H3_temp <- H3_const[index] * (t_cutoff - t1)^alpha3 * exp(beta3_tv_const + beta3_tv_lin * t1)
+    conditional=function(t1,t_cutoff,index,D_eps, beta3_tv_const=0,
+                         beta3_tv_lin=0,betaD_tv_const=0,betaD_tv_lin=0){
+    H3_temp <- H3_const[index] * (t_cutoff - (t1+D_eps))^alpha3 *
+                  exp(beta3_tv_const + beta3_tv_lin * t1)
     #return the right value corresponding to the hazard and type
     #ASSUME SEMI-MARKOV, CONDITIONAL, AND WEIBULL
     gamma[index] * h1_const[index] * t1^alpha1_m1 *
@@ -306,6 +311,38 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
   )
 
 
+
+  #function of t1 if we pre-integrate t2 from t1 to t_cutoff
+  #aka, integrand needed to generate probability of both events occurring by t_cutoff
+  f_joint_t1_both_invinst <- switch(type,
+     marginal=function(t1, index, beta3_tv_const=0, beta3_tv_lin=0, betaD_tv_const=0, betaD_tv_lin=0){
+       temp <- 0
+       for(x in 1:n_quad){
+         temp2 <- exp(gh_adj_nodes[x]) * h1_const[index] * t1^alpha1_m1 *
+           (1-pi_vec(t1 = t1,index = index,gamma = exp(gh_adj_nodes[x]),
+                  betaD_tv_const = betaD_tv_const,betaD_tv_lin = betaD_tv_lin)) *
+           exp( -exp(gh_adj_nodes[x]) * H1_const[index] * t1^alpha1 -
+                  exp(gh_adj_nodes[x] * beta2frail) * H2_const[index] * t1^alpha2 )
+         temp <- temp + temp2 * gh_weights[x]
+       }
+       temp / sqrt(pi)
+     },
+     conditional=function(t1, index, beta3_tv_const=0, beta3_tv_lin=0, betaD_tv_const=0, betaD_tv_lin=0){
+       #return the right value corresponding to the hazard and type
+       #ASSUME SEMI-MARKOV, CONDITIONAL, AND WEIBULL
+       gamma[index] * h1_const[index] * t1^alpha1_m1 *
+         (1-pi_vec(t1 = t1,index = index,gamma = gamma, betaD_tv_const = betaD_tv_const,betaD_tv_lin = betaD_tv_lin)) *
+         exp( -gamma[index] * H1_const[index] * t1^alpha1 -
+                gamma[index]^beta2frail * H2_const[index] * t1^alpha2 )
+     }
+  )
+
+
+
+
+
+
+
   ##finally, p_neither has a closed form, so we can write a function for it directly##
   #this derivation is actually identical to the "no event" likelihood contribution
   p_neither_func <- switch(type,
@@ -336,81 +373,138 @@ calc_risk_logitbayes <- function(para, Xmat1, Xmat2, Xmat3, XmatD, hazard,
   #therefore, we need to create the right data structure to contain the output.
   if(n > 1){
     if(t_length > 1){
-      out_mat <- array(dim=c(t_length,n_cat,n),dimnames = list(paste0("t",t_cutoff),cat_labs,paste0("i",1:n)))
+      out_mat <- array(dim=c(t_length,n_cat,n),
+                       dimnames = list(paste0("t",t_cutoff),cat_labs,paste0("i",1:n)))
     } else{
-      out_mat <- matrix(nrow=n,ncol=n_cat,dimnames = list(paste0("i",1:n),cat_labs))
+      out_mat <- matrix(nrow=n,ncol=n_cat,
+                        dimnames = list(paste0("i",1:n),cat_labs))
     }
   } else{
-    out_mat <- matrix(nrow=t_length,ncol=n_cat,dimnames = list(paste0("t",t_cutoff),cat_labs))
+    out_mat <- matrix(nrow=t_length,ncol=n_cat,
+                      dimnames = list(paste0("t",t_cutoff),cat_labs))
   }
 
   #loop through each time point, and compute the predicted probability at that time point for all subjects
   #each probability is an n-length vector
 
-  #TO-DO: MAKE THIS GO INCREMENTALLY, WHICH I THINK WILL BE FASTER / MORE STABLE?
-
   for(t_ind in 1:t_length){
     t_temp <- t_cutoff[t_ind]
-    p_tonly <- sapply(1:n,function(x){tryCatch(stats::integrate(f_t2, lower=0, upper=t_temp, index=x)$value,
-                                               error=function(cnd){return(NA)}) })
-    p_neither <- p_neither_func(t2=t_temp)
 
-    #now, we have to be careful computing the probabilities that include h3 because it may depend on t1
-    # p_both_start <- p_ntonly_start <- rep(0,n)
+    if(t_temp <= D_eps){
+      #this is a fudge but also it's so early I think it shouldn't matter
+      out_temp <- cbind(p_ntonly=0,
+                        if(logit_ind) cbind(p_both_noinst=0,p_both_inst=0) else cbind(p_both=0),
+                        p_tonly=0,
+                        p_neither=1)
+    } else{
+      p_tonly <- sapply(1:n,function(x){tryCatch(stats::integrate(f_t2, lower=0, upper=t_temp, index=x)$value,
+                                                 error=function(cnd){return(NA)}) })
+      p_neither <- p_neither_func(t2=t_temp)
 
-    if(h3_tv %in% c("piecewise")){
-      #a piecewise effect cannot be integrated in one go, because it is discontinuous
-      #instead it must be divided into constant regions, integrated one region at a time and summed up
-      curr_interval <- findInterval(x = t_temp,h3tv_knots,left.open = TRUE)
-      #this is now a vector starting at 0, with elements at each change point up to the target time t_temp
-      tv_knots_temp <- c(h3tv_knots[1:curr_interval],t_temp)
-      if(t_temp == 0){ tv_knots_temp <- c(0,0)}
+      #now, we have to be careful computing the probabilities that include h3 because it may depend on t1
+      # p_both_start <- p_ntonly_start <- rep(0,n)
+      if(h3_tv %in% c("piecewise")){
 
-      #loop through the regions of constant effect, and add them together
-      p_both <- p_ntonly <- rep(0,n)
-      if(logit_ind) p_both_inst <- rep(0,n)
-      for(i in 1:(length(tv_knots_temp)-1)){
-        p_both <- p_both + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both, lower=tv_knots_temp[i], upper=tv_knots_temp[i+1],
-                                                                            t_cutoff=t_temp, index=x,
-                                                                            beta3_tv_const=beta3_tv[i], beta3_tv_lin=0,
-                                                                            betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
-                                                           error=function(cnd){return(NA)}) })
+        #however, we need to do this again for the integral that only goes up to t-D_eps
+        curr_interval_meps <- findInterval(x = t_temp-D_eps,h3tv_knots,left.open = TRUE)
+        tv_knots_temp_meps <- c(h3tv_knots[1:curr_interval_meps],t_temp-D_eps)
 
-        p_ntonly <- p_ntonly + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_nonTerm, lower=tv_knots_temp[i], upper=tv_knots_temp[i+1],
-                                                                                t_cutoff=t_temp, index=x,
-                                                                                beta3_tv_const=beta3_tv[i], beta3_tv_lin=0,
-                                                                                betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
-                                                               error=function(cnd){return(NA)}) })
+        #loop through the regions of constant effect, and add them together
+        p_both <- p_ntonly <- rep(0,n)
+        for(i in 1:(length(tv_knots_temp_meps)-1)){
+          #in context of immediate events this corresponds with "non-instant"
+          p_both <- p_both + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both,
+                                lower=tv_knots_temp_meps[i], upper=tv_knots_temp_meps[i+1],
+                                t_cutoff=t_temp, D_eps=D_eps, index=x,
+                                beta3_tv_const=beta3_tv[i], beta3_tv_lin=0,
+                                betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
+                                                             error=function(cnd){return(NA)}) })
+
+          p_ntonly <- p_ntonly + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_nonTerm,
+                                    lower=tv_knots_temp_meps[i], upper=tv_knots_temp_meps[i+1],
+                                    t_cutoff=t_temp, D_eps=D_eps, index=x,
+                                    beta3_tv_const=beta3_tv[i], beta3_tv_lin=0,
+                                    betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
+                                                         error=function(cnd){return(NA)}) })
+        }
+
+        #here, integrate for "both instant"
         if(logit_ind){
-          p_both_inst <- p_both_inst + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both_inst, lower=tv_knots_temp[i], upper=tv_knots_temp[i+1],
-                                                                                        index=x, beta3_tv_const=beta3_tv[i], beta3_tv_lin=0,
-                                                                                        betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
-                                                                       error=function(cnd){return(NA)}) })
+          p_both_inst <- rep(0,n)
+          #a piecewise effect cannot be integrated in one go, because it is discontinuous
+          #instead it must be divided into constant regions, integrated one region at a time and summed up
+          curr_interval <- findInterval(x = t_temp,h3tv_knots,left.open = TRUE)
+          #this is now a vector starting at 0, with elements at each change point up to the target time t_temp
+          tv_knots_temp <- c(h3tv_knots[1:curr_interval],t_temp)
+          for(i in 1:(length(tv_knots_temp)-1)){
+            p_both_inst <- p_both_inst + sapply(1:n,function(x){
+              tryCatch(stats::integrate(f_joint_t1_both_inst,
+                                        lower=tv_knots_temp[i], upper=tv_knots_temp[i+1],
+                                        index=x, beta3_tv_const=beta3_tv[i], beta3_tv_lin=0,
+                                        betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
+                       error=function(cnd){return(NA)}) })
+          }
+
+          if(curr_interval_meps != curr_interval){ #t-eps and t are in different intervals
+            # browser()
+
+            tv_knots_temp2 <- c(t_temp-D_eps,h3tv_knots[(curr_interval_meps+1):curr_interval],t_temp)
+
+            # all_tv_knots_temp_meps2 <- unique(round(sort(c(t_temp-D_eps,h3tv_knots, t_temp)),5))
+            # tv_knots_temp_meps2 <- all_tv_knots_temp_meps2[all_tv_knots_temp_meps2 >= (t_temp-D_eps) & all_tv_knots_temp_meps2 <= t_temp]
+
+            for(i in 1:(curr_interval-curr_interval_meps+1)){
+              temp_ind <- curr_interval_meps+i-1
+              p_ntonly <- p_ntonly + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both_invinst,
+                                        lower=tv_knots_temp2[i], upper=tv_knots_temp2[i+1],
+                                        index=x,
+                                        beta3_tv_const=beta3_tv[temp_ind], #i should still be same "correct" final interval from above
+                                        beta3_tv_lin=beta3_tv_linear,
+                                        betaD_tv_const=betaD_tv[temp_ind],betaD_tv_lin=0)$value,
+                       error=function(cnd){return(NA)}) })
+            }
+          } else{
+            p_ntonly <- p_ntonly + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both_invinst,
+                                          lower=t_temp-D_eps, upper=t_temp, index=x,
+                                          beta3_tv_const=beta3_tv[i], #i should still be same "correct" final interval from above
+                                          beta3_tv_lin=beta3_tv_linear,
+                                          betaD_tv_const=betaD_tv[i],betaD_tv_lin=0)$value,
+                         error=function(cnd){return(NA)}) })
+          }
+
+        }
+
+      } else{ #just normal, time-invariant prediction or a linear effect of time
+        p_both <- sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both,
+                                           lower=0, upper=t_temp-D_eps,
+                                           t_cutoff=t_temp, D_eps=D_eps, index=x,
+                                           beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
+                                           betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
+                                         error=function(cnd){return(NA)}) })
+        p_ntonly <- sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_nonTerm,
+                                 lower=0, upper=t_temp-D_eps,
+                                 t_cutoff=t_temp, D_eps=D_eps, index=x,
+                                 beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
+                                 betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
+                                                  error=function(cnd){return(NA)}) })
+        if(logit_ind){
+          p_ntonly <- p_ntonly + sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both_invinst,
+                                    lower=t_temp-D_eps, upper=t_temp, index=x,
+                                    beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
+                                    betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
+                   error=function(cnd){return(NA)}) })
+          p_both_inst <- sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both_inst,
+                                lower=0, upper=t_temp, index=x,
+                                beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
+                                betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
+                                                         error=function(cnd){return(NA)}) })
         }
       }
-    } else{ #just normal, time-invariant prediction or a linear effect of time
-      p_both <- sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both, lower=0, upper=t_temp,
-                                                                 t_cutoff=t_temp, index=x,
-                                                                 beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
-                                                                 betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
-                                                error=function(cnd){return(NA)}) })
-      p_ntonly <- sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_nonTerm, lower=0, upper=t_temp,
-                                                                   t_cutoff=t_temp, index=x,
-                                                                   beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
-                                                                   betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
-                                                  error=function(cnd){return(NA)}) })
-      if(logit_ind){
-        p_both_inst <- sapply(1:n,function(x){tryCatch(stats::integrate(f_joint_t1_both_inst, lower=0, upper=t_temp,
-                                                                        index=x, beta3_tv_const=0,beta3_tv_lin=beta3_tv_linear,
-                                                                        betaD_tv_const=0,betaD_tv_lin=betaD_tv_linear)$value,
-                                                       error=function(cnd){return(NA)}) })
-      }
+      out_temp <- cbind(p_ntonly=p_ntonly,
+          if(logit_ind) cbind(p_both_noinst=p_both,p_both_inst=p_both_inst) else cbind(p_both=p_both),
+          p_tonly=p_tonly,
+          p_neither=p_neither)
     }
-
-    out_temp <- cbind(p_ntonly=p_ntonly,
-                      if(logit_ind) cbind(p_both_noinst=p_both,p_both_inst=p_both_inst) else cbind(p_both=p_both),
-                      p_tonly=p_tonly,
-                      p_neither=p_neither)
 
     #I noticed that sometimes, if exactly one category has an NA, then we could back out the value
     #from the other categories. However, we don't want any to be negative.

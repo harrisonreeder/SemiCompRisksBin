@@ -962,7 +962,7 @@ void BweibScrSMlogit_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
                                const double &kappa1, const double &alpha1,
                                const double &kappa2, const double &alpha2,
                                const double &kappa3, const double &alpha3,
-                               const arma::vec &y1, const arma::vec &y_sm,
+                               const arma::vec &y1, const arma::vec &y_sm, const double &eps,
                                const arma::uvec &delta1, const arma::uvec &delta1noD,
                                const arma::uvec &delta_cr, const arma::uvec &delta_sm,
                                const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long){
@@ -980,6 +980,11 @@ void BweibScrSMlogit_logLH_vec(arma::vec &logLH_vec, const arma::vec &frail,
                                        alpha3, kappa3, eta3(sm_ind_long(i)), frail(i));
       } else{ //then non-terminal event has occurred followed by immediate death
         logliki += etaD(delta1_ind_long(i)) + log(frail(i));
+        //lastly, account for the "density" of the immediate event window
+        //just assume that it is uniform over the interval, so log(1/eps) = -log(eps)
+        if(eps>0){
+          logliki += -log(eps);
+        }
       }
     }
     //update ith contribution
@@ -993,7 +998,7 @@ void BweibScrSMlogit_logLH_marg_vec(arma::vec &logLH_marg_vec,
                                const double &kappa1, const double &alpha1,
                                const double &kappa2, const double &alpha2,
                                const double &kappa3, const double &alpha3, const double &theta,
-                               const arma::vec &y1, const arma::vec &y_sm,
+                               const arma::vec &y1, const arma::vec &y_sm, const double &eps,
                                const arma::uvec &delta1, const arma::uvec &delta1noD,
                                const arma::uvec &delta_cr, const arma::uvec &delta_sm,
                                const arma::uvec &sm_ind_long, const arma::uvec &delta1_ind_long,
@@ -1025,6 +1030,11 @@ void BweibScrSMlogit_logLH_marg_vec(arma::vec &logLH_marg_vec,
                                          alpha3, kappa3, eta3(sm_ind_long(i)), exp(logfrail));
         } else{ //then non-terminal event has occurred followed by immediate death
           logliki += etaD(delta1_ind_long(i)) + logfrail;
+          //lastly, account for the "density" of the immediate event window
+          //just assume that it is uniform over the interval, so log(1/eps) = -log(eps)
+          if(eps>0){
+            logliki += -log(eps);
+          }
         }
       }
 
@@ -1053,6 +1063,7 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
                        const arma::uvec &delta_sm, const arma::uvec &delta1D_sub,
                        const arma::mat &Xmat1, const arma::mat &Xmat2,
                        const arma::mat &Xmat3, const arma::mat &XmatD,
+                       const double &eps,
                        const arma::vec &hyper_vec,
                        const arma::vec &tuning_vec,
                        const arma::vec &start_vec,
@@ -1419,7 +1430,7 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
         // Rcpp::Rcout << "iter: " << M << "\n";
         BweibScrSMlogit_logLH_marg_vec(logLH_marg_vec, eta1, eta2, eta3, etaD,
                                        kappa1, alpha1, kappa2, alpha2, kappa3, alpha3, theta,
-                                       y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                                       y1, y_sm, eps, delta1, delta1noD, delta_cr, delta_sm,
                                        sm_ind_long, delta1_ind_long, gh_nodes, gh_weights);
         sample_logLH_marg(StoreInx - 1) = arma::accu(logLH_marg_vec);
         LH_marg_mean_vec = ((StoreInx - 1) * LH_marg_mean_vec + arma::exp(logLH_marg_vec)) / StoreInx;
@@ -1432,7 +1443,7 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
       //deviance information (might be better to compute "marginal" version here, millar 2009)
       BweibScrSMlogit_logLH_vec(logLH_vec, frail, eta1, eta2, eta3, etaD,
                                 kappa1, alpha1, kappa2, alpha2, kappa3, alpha3,
-                                y1, y_sm, delta1, delta1noD, delta_cr, delta_sm,
+                                y1, y_sm, eps, delta1, delta1noD, delta_cr, delta_sm,
                                 sm_ind_long, delta1_ind_long);
       if(nlogLHi_save>0){
         sample_logLHi.col(StoreInx - 1) = logLH_vec.head(nlogLHi_save);

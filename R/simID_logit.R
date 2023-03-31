@@ -28,22 +28,18 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
                   beta1.true, beta2.true, beta3.true,
                   alpha1.true, alpha2.true, alpha3.true,
                   kappa1.true, kappa2.true, kappa3.true,
-
                   theta.true, frailty_type="gamma",
                   beta2frail.true=1, beta3frail.true=1, betaDfrail.true=1,
-
                   beta3tv.true=NULL, h3tv_degree=3,
-
-                  anyD=TRUE, betaD.true=NULL,
-                  betaDtv.true=NULL, Dtv_degree=3,
-
+                  anyD=TRUE, D_eps=0, D_dist="uniform",
+                  betaD.true=NULL, betaDtv.true=NULL, Dtv_degree=3,
                   cens = c(0,0)) {
-  # browser()
+  browser()
   n <- dim(x1)[1]
   p1 <- dim(x1)[2]
   p2 <- dim(x2)[2]
   p3 <- dim(x3)[2]
-  if(anyD==TRUE & !is.null(xD)){
+  if(anyD & !is.null(xD)){
     pD <- dim(xD)[2]
     stopifnot(pD == length(betaD.true))
   } else{
@@ -62,35 +58,33 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
 
   LP1	<- if(p1>0) as.vector(beta1.true %*% t(x1)) else 0
   LP2	<- if(p2>0) as.vector(beta2.true %*% t(x2)) else 0
-  LP3	<- if(p3>0) as.vector(beta3.true %*% t(x3)) else numeric(n) #made a vector bc it is subset automatically by yesR below
+  LP3	<- if(p3>0) as.vector(beta3.true %*% t(x3)) else numeric(n) #made a vector bc it is subset automatically by delta1 below
   LPD	<- if(pD>0) as.vector(betaD.true %*% t(xD)) else 0
 
-  Rind <- NULL
-  R <- stats::rweibull(n, shape = alpha1.true, scale = exp(-(log(kappa1.true) +
+  T1 <- stats::rweibull(n, shape = alpha1.true, scale = exp(-(log(kappa1.true) +
                                                         LP1 + log(gamma.true))/alpha1.true))
-  D <- stats::rweibull(n, shape = alpha2.true, scale = exp(-(log(kappa2.true) +
+  T2_temp <- stats::rweibull(n, shape = alpha2.true, scale = exp(-(log(kappa2.true) +
                                                         LP2 + beta2frail.true * log(gamma.true))/alpha2.true))
-  yesR <- R < D
+  yesT1 <- T1 < T2_temp
   if(cens[2] == 0){
     Cen <- rep(Inf,n)
   } else{
     Cen <- stats::runif(n, cens[1], cens[2])
   }
 
-
   #now, incorporate a possibly time-varying component into LP3
   if(!is.null(beta3tv.true)){ #if we set total number of parameters to 0, then we have no time-varying component.
     p3tv <- length(beta3tv.true)
     if(h3tv_degree == "linear"){ #linear
       stopifnot(p3tv==1)
-      x3tv <- as.matrix(pmin(R,D,Cen))
+      x3tv <- as.matrix(pmin(T1,T2_temp,Cen))
       colnames(x3tv) <- paste0("h3tv",1)
       LP3 <- LP3 + x3tv %*% beta3tv.true
       h3_knots <- c(0,Inf)
 
     } else if(h3tv_degree == "log1p") {
       stopifnot(p3tv==1)
-      x3tv <- as.matrix(log1p(pmin(R,D,Cen)))
+      x3tv <- as.matrix(log1p(pmin(T1,T2_temp,Cen)))
       colnames(x3tv) <- paste0("h3tv",1)
       LP3 <- LP3 + x3tv %*% beta3tv.true
       h3_knots <- c(0,Inf)
@@ -99,8 +93,10 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
       #in cubic spline model, boundary knots are set directly at min/max endpoints,
       #so no need to fix at 0
       h3_quantile_seq <- seq(from = 0,to = 1, length.out = p3tv+1)
-      h3_knots <- stats::quantile(pmin(R,Cen)[yesR==1 & R<Cen], h3_quantile_seq)
-      x3tv <- splines::ns(x = pmin(R,D,Cen), knots = h3_knots[-c(1,length(h3_knots))],
+      #pmin(T1,Cen) gives vector of y1 times, from which we use just the observed non-terminal events
+      #to define quantiles for the knots
+      h3_knots <- stats::quantile(pmin(T1,Cen)[yesT1 & T1<Cen], h3_quantile_seq)
+      x3tv <- splines::ns(x = pmin(T1,T2_temp,Cen), knots = h3_knots[-c(1,length(h3_knots))],
                           Boundary.knots = h3_knots[c(1,length(h3_knots))],
                           intercept = FALSE)
     } else { #if we don't use restricted cubic, then we are using a regular b-spline with specified degree
@@ -108,9 +104,9 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
       stopifnot(p3tv>=h3tv_degree)
       h3_quantile_seq <- seq(from = 0,to = 1, length.out = p3tv+2-h3tv_degree)[-c(1,p3tv+2-h3tv_degree)]
       #fixing piecewise endpoint at maximum is ok, because splines2 prediction will extrapolate beyond it
-      h3_knots <- c(0,stats::quantile(pmin(R,Cen)[yesR==1 & R<Cen],
-                                      h3_quantile_seq),max(pmin(R,D,Cen)))
-      x3tv <- splines2::bSpline(x = pmin(R,D,Cen), intercept = FALSE, degree = h3tv_degree,
+      h3_knots <- c(0,stats::quantile(pmin(T1,Cen)[yesT1 & T1<Cen],
+                                      h3_quantile_seq),max(pmin(T1,T2_temp,Cen)))
+      x3tv <- splines2::bSpline(x = pmin(T1,T2_temp,Cen), intercept = FALSE, degree = h3tv_degree,
                                 knots = h3_knots[-c(1,length(h3_knots))],
                                 Boundary.knots = h3_knots[c(1,length(h3_knots))])
     }
@@ -120,41 +116,49 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
     p3tv <- 0
   }
 
-  D[yesR] <- R[yesR] + stats::rweibull(sum(yesR), shape = alpha3.true,
-                          scale = exp(-(log(kappa3.true) + LP3[yesR] +
-                                          beta3frail.true * log(gamma.true[yesR]))/alpha3.true))
-  delta1 <- rep(NA, n)
-  delta2 <- rep(NA, n)
-  y1 <- R
-  y2 <- D
+  #now, generate sojourn times for those with non-terminal event
+  Sojourn <- rep(NA, n)
+  Sojourn[yesT1] <- stats::rweibull(sum(yesT1), shape = alpha3.true,
+                  scale = exp(-(log(kappa3.true) + LP3[yesT1] +
+                                  beta3frail.true * log(gamma.true[yesT1]))/alpha3.true))
+
+  T2 <- T2_temp
+  T2[yesT1] <- T1[yesT1] + Sojourn[yesT1]
+
+  y1 <- T1
+  y2 <- T2
+  delta1 <- delta2 <- rep(NA, n)
 
   #cases where terminal occurs before non-terminal and censoring
-  ind01 <- which(D < R & D < Cen)
-  y1[ind01] <- D[ind01]
+  ind01 <- which(T2 < T1 & T2 < Cen)
+  y1[ind01] <- T2[ind01]
   delta1[ind01] <- 0
   delta2[ind01] <- 1
 
   #cases where nonterminal occurs, then censoring before terminal
-  ind10 <- which(R < D & R < Cen & D >= Cen)
+  ind10 <- which(T1 < T2 & T1 < Cen & T2 >= Cen)
   y2[ind10] <- Cen[ind10]
   delta1[ind10] <- 1
   delta2[ind10] <- 0
 
   #cases where censoring occurs first
-  ind00 <- which(R >= Cen & D >= Cen)
+  ind00 <- which(T1 >= Cen & T2 >= Cen)
   y1[ind00] <- Cen[ind00]
   y2[ind00] <- Cen[ind00]
   delta1[ind00] <- 0
   delta2[ind00] <- 0
 
   #cases where nonterminal occurs, then terminal, then censoring
-  ind11 <- which(R < Cen & D < Cen & R < D)
+  ind11 <- which(T1 < Cen & T2 < Cen & T1 < T2)
   delta1[ind11] <- 1
   delta2[ind11] <- 1
 
+  #for censored observations, replace the sojourn time with the censored time
+  Sojourn[delta1==1 & delta2==0] <- (y2-y1)[delta1==1 & delta2==0]
+
   #this is a gut-check that the values I build the basis for h3tv on above
   #match the values of y1 for all observations that matter (e.g., those with delta1==1)
-  stopifnot(all((y1==pmin(R,Cen))[delta1==1]))
+  stopifnot(all((y1==pmin(T1,Cen))[delta1==1]))
 
   if(anyD){
     LPD <- LPD + betaDfrail.true * log(gamma.true)
@@ -198,14 +202,35 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
       pDtv <- 0
     }
 
-    Dimmediate <- if(pD > 0 | pDtv > 0) stats::rbinom(n,size = 1,
-                                    prob = stats::plogis(q = LPD)) else numeric(n)
-    ind1D <- (delta1 & Dimmediate)
-    y2[ind1D] <- y1[ind1D]
-    delta2[ind1D] <- 0
-    deltaD <- as.numeric(ind1D)
+    #this generates for all n obs, not just those with delta1==1, but that's ok.
+    if(pD > 0 | pDtv > 0){
+      probD.true <- stats::plogis(q = LPD)
+      Dimmediate <- stats::rbinom(n,size = 1,prob = probD.true)
+    } else{
+      Dimmediate <- ProbD <- numeric(n)
+    }
+
+    delta1D <- as.numeric(delta1 & Dimmediate)
+    delta2[delta1D==1] <- 0
+
+    #for now, D_dist is only "uniform"
+    #generate the "hypothetical" immediate event time uniformly on the interval (0,eps)
+    D_eps.time <- stats::runif(n,min=0,max=D_eps)
+
+    #if you had a non-immediate event, y2 is y1 + y_sm + D_eps (width of window)
+    #note this shifts censored times as well as event times...
+    y2[delta1==1 & Dimmediate==0] <- y2[delta1==1 & Dimmediate==0] + D_eps
+    #if you had the immediate event, y2 is y1 + D_eps.time (i.e., a random little bit)
+    y2[delta1D==1] <- y1[delta1D==1] + D_eps.time[delta1D==1]
+
+    #this should correctly account for censoring because we've adjusted Sojourn above
+    y_sm <- rep(0,n)
+    y_sm[delta1==1 & Dimmediate==0] <- Sojourn[delta1==1 & Dimmediate==0]
+
   } else{
     pDtv <- 0
+    y_sm <- rep(0,n)
+    y_sm[delta1==1] <- Sojourn[delta1==1]
   }
 
   # #there are no differences between the spline used, and that used
@@ -216,9 +241,10 @@ simID_logit <- function(x1, x2, x3, xD=NULL,
   #           x3tv[delta1==1,])
   # all.equal(splines:::predict.ns(object = x3tv, newx = y1), x3tv)
 
-  ret <- data.frame(cbind(y1, delta1, y2, delta2,
-                          deltaD = if(anyD) deltaD else 0,
-                          gamma.true,
+  ret <- data.frame(cbind(y1, delta1, y2, delta2, y_sm,
+                          deltaD = if(anyD) delta1D else 0,
+                          D_eps, D_eps.time,
+                          gamma.true, probD.true,
                           if(p3tv > 0) x3tv,
                           if(pDtv > 0) xDtv))
 

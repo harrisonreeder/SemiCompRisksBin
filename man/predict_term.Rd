@@ -8,6 +8,8 @@ predict_term(
   object,
   x3new = NULL,
   xDnew = NULL,
+  logit_ind = TRUE,
+  D_eps = 0,
   tseq,
   type = "conditional",
   out = "long",
@@ -20,6 +22,8 @@ predict_term(
 \item{object}{object fit by Bayes_Logit}
 
 \item{x3new, xDnew}{new matrix of values at which to predict}
+
+\item{logit_ind}{augmented model or standard model}
 
 \item{tseq}{sequence of values at which to make predictions}
 
