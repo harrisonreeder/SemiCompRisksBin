@@ -622,105 +622,105 @@ compute_nri <- function(outcome_mat, pred_mat1, pred_mat2, ipcw_mat){
 }
 
 
-#' Compute AUC for Non-terminal and Terminal outcomes
-#'
-#' Function to compute univariate prediction statistics
-#'
-#'
-#' @inheritParams compute_score
-#' @inheritParams calc_risk
-#' @param dat Data
-#'
-#' @return a vector with the non-terminal and terminal AUC.
-#' @export
-compute_auc <- function(dat,t_cutoff, pred_mat){
-  #For now, this one is only implemented for when these are just matrices, aka for a single choice of t.
-  #need pred_mat to be from same value as t_cutoff, however!
-
-
-  # browser()
-  nonterm_comp_risk_time <- ifelse(dat$y1 < dat$y2, dat$y1, dat$y2)
-  comp_risk_event <- ifelse( (dat$y1 == dat$y2) & dat$delta2==1,2,ifelse(dat$y1 == dat$y2 & dat$delta2==0,0,1))
-  outcomes <- cbind(dat[,c("y1","delta1","y2","delta2")],
-                    nonterm_comp_risk_time=nonterm_comp_risk_time,
-                    comp_risk_event=comp_risk_event)
-
-  # #This former approach used dplyr but we don't need it!
-  # #Now, I'm just testing another commit
-  # outcomes <- dat %>% dplyr::select(y1,delta1,y2,delta2) %>%
-  #   dplyr::mutate(nonterm_comp_risk_time = ifelse(y1 < y2, y1, y2),
-  #          comp_risk_event = ifelse( (y1 == y2) & delta2==1,2,ifelse(y1 == y2 & delta2==0,0,1))
-  #   )
-
-  #treats terminal outcome as a competing risk
-  ROC_nonterm <- timeROC::timeROC(T=outcomes$nonterm_comp_risk_time,
-                           delta=outcomes$comp_risk_event,
-                           marker=pred_mat[,"p_ntonly"] + pred_mat[,"p_both"],
-                           cause=1,weighting="marginal",
-                           times=t_cutoff,
-                           iid=TRUE)
-
-  ROC_term <- timeROC::timeROC(T=outcomes$y2,
-                        delta=outcomes$delta2,
-                        marker=pred_mat[,"p_tonly"] + pred_mat[,"p_both"],
-                        cause=1,weighting="marginal",
-                        times=t_cutoff,
-                        iid=TRUE)
-
-  return(c(AUC_nonterm = ROC_nonterm$AUC_1[2],
-           AUC_term = ROC_term$AUC[2]))
-}
-
-
-#' Compute AUC for Non-terminal and Terminal outcomes
-#'
-#' Function to compute univariate prediction statistics
+#' #' Compute AUC for Non-terminal and Terminal outcomes
+#' #'
+#' #' Function to compute univariate prediction statistics
+#' #'
+#' #'
+#' #' @inheritParams compute_score
+#' #' @inheritParams calc_risk
+#' #' @param dat Data
+#' #'
+#' #' @return a vector with the non-terminal and terminal AUC.
+#' #' @export
+#' compute_auc <- function(dat,t_cutoff, pred_mat){
+#'   #For now, this one is only implemented for when these are just matrices, aka for a single choice of t.
+#'   #need pred_mat to be from same value as t_cutoff, however!
 #'
 #'
-#' @inheritParams compute_score
-#' @inheritParams calc_risk
-#' @param dat Data
+#'   # browser()
+#'   nonterm_comp_risk_time <- ifelse(dat$y1 < dat$y2, dat$y1, dat$y2)
+#'   comp_risk_event <- ifelse( (dat$y1 == dat$y2) & dat$delta2==1,2,ifelse(dat$y1 == dat$y2 & dat$delta2==0,0,1))
+#'   outcomes <- cbind(dat[,c("y1","delta1","y2","delta2")],
+#'                     nonterm_comp_risk_time=nonterm_comp_risk_time,
+#'                     comp_risk_event=comp_risk_event)
 #'
-#' @return a vector with the non-terminal and terminal AUC.
-#' @export
-compute_auc_logit <- function(dat,t_cutoff, pred_mat){
-  #For now, this one is only implemented for when these are just matrices, aka for a single choice of t.
-  #need pred_mat to be from same value as t_cutoff, however!
-
-  # browser()
-
-  #non-terminal event time treating terminal as competing risk
-  nonterm_comp_risk_time <- pmin(dat$y1, dat$y2)
-  comp_risk_event <- ifelse( dat$delta1==1, 1,
-                             ifelse(dat$delta2==1, 2,
-                             0))
-
-  delta2_fixed <- as.numeric(dat$delta2 == 1 | (dat$delta1==1 & dat$deltaD==1))
-
-  # #This former approach used dplyr but we don't need it!
-  # #Now, I'm just testing another commit
-  # outcomes <- dat %>% dplyr::select(y1,delta1,y2,delta2) %>%
-  #   dplyr::mutate(nonterm_comp_risk_time = ifelse(y1 < y2, y1, y2),
-  #          comp_risk_event = ifelse( (y1 == y2) & delta2==1,2,ifelse(y1 == y2 & delta2==0,0,1))
-  #   )
-
-  #treats terminal outcome as a competing risk
-  ROC_nonterm <- timeROC::timeROC(T=nonterm_comp_risk_time,
-                                  delta=comp_risk_event,
-                                  marker=pred_mat[,"p_ntonly"] + pred_mat[,"p_both_noinst"]  + pred_mat[,"p_both_inst"],
-                                  cause=1,weighting="marginal",
-                                  times=t_cutoff,
-                                  iid=TRUE)
-
-
-  ROC_term <- timeROC::timeROC(T=dat$y2,
-                               delta=delta2_fixed,
-                               marker=pred_mat[,"p_tonly"] + pred_mat[,"p_both_noinst"]  + pred_mat[,"p_both_inst"],
-                               cause=1,weighting="marginal",
-                               times=t_cutoff,
-                               iid=TRUE)
-
-  return(c(AUC_nonterm = ROC_nonterm$AUC_1[2],
-           AUC_term = ROC_term$AUC[2]))
-}
+#'   # #This former approach used dplyr but we don't need it!
+#'   # #Now, I'm just testing another commit
+#'   # outcomes <- dat %>% dplyr::select(y1,delta1,y2,delta2) %>%
+#'   #   dplyr::mutate(nonterm_comp_risk_time = ifelse(y1 < y2, y1, y2),
+#'   #          comp_risk_event = ifelse( (y1 == y2) & delta2==1,2,ifelse(y1 == y2 & delta2==0,0,1))
+#'   #   )
+#'
+#'   #treats terminal outcome as a competing risk
+#'   ROC_nonterm <- timeROC::timeROC(T=outcomes$nonterm_comp_risk_time,
+#'                            delta=outcomes$comp_risk_event,
+#'                            marker=pred_mat[,"p_ntonly"] + pred_mat[,"p_both"],
+#'                            cause=1,weighting="marginal",
+#'                            times=t_cutoff,
+#'                            iid=TRUE)
+#'
+#'   ROC_term <- timeROC::timeROC(T=outcomes$y2,
+#'                         delta=outcomes$delta2,
+#'                         marker=pred_mat[,"p_tonly"] + pred_mat[,"p_both"],
+#'                         cause=1,weighting="marginal",
+#'                         times=t_cutoff,
+#'                         iid=TRUE)
+#'
+#'   return(c(AUC_nonterm = ROC_nonterm$AUC_1[2],
+#'            AUC_term = ROC_term$AUC[2]))
+#' }
+#'
+#'
+#' #' Compute AUC for Non-terminal and Terminal outcomes
+#' #'
+#' #' Function to compute univariate prediction statistics
+#' #'
+#' #'
+#' #' @inheritParams compute_score
+#' #' @inheritParams calc_risk
+#' #' @param dat Data
+#' #'
+#' #' @return a vector with the non-terminal and terminal AUC.
+#' #' @export
+#' compute_auc_logit <- function(dat,t_cutoff, pred_mat){
+#'   #For now, this one is only implemented for when these are just matrices, aka for a single choice of t.
+#'   #need pred_mat to be from same value as t_cutoff, however!
+#'
+#'   # browser()
+#'
+#'   #non-terminal event time treating terminal as competing risk
+#'   nonterm_comp_risk_time <- pmin(dat$y1, dat$y2)
+#'   comp_risk_event <- ifelse( dat$delta1==1, 1,
+#'                              ifelse(dat$delta2==1, 2,
+#'                              0))
+#'
+#'   delta2_fixed <- as.numeric(dat$delta2 == 1 | (dat$delta1==1 & dat$deltaD==1))
+#'
+#'   # #This former approach used dplyr but we don't need it!
+#'   # #Now, I'm just testing another commit
+#'   # outcomes <- dat %>% dplyr::select(y1,delta1,y2,delta2) %>%
+#'   #   dplyr::mutate(nonterm_comp_risk_time = ifelse(y1 < y2, y1, y2),
+#'   #          comp_risk_event = ifelse( (y1 == y2) & delta2==1,2,ifelse(y1 == y2 & delta2==0,0,1))
+#'   #   )
+#'
+#'   #treats terminal outcome as a competing risk
+#'   ROC_nonterm <- timeROC::timeROC(T=nonterm_comp_risk_time,
+#'                                   delta=comp_risk_event,
+#'                                   marker=pred_mat[,"p_ntonly"] + pred_mat[,"p_both_noinst"]  + pred_mat[,"p_both_inst"],
+#'                                   cause=1,weighting="marginal",
+#'                                   times=t_cutoff,
+#'                                   iid=TRUE)
+#'
+#'
+#'   ROC_term <- timeROC::timeROC(T=dat$y2,
+#'                                delta=delta2_fixed,
+#'                                marker=pred_mat[,"p_tonly"] + pred_mat[,"p_both_noinst"]  + pred_mat[,"p_both_inst"],
+#'                                cause=1,weighting="marginal",
+#'                                times=t_cutoff,
+#'                                iid=TRUE)
+#'
+#'   return(c(AUC_nonterm = ROC_nonterm$AUC_1[2],
+#'            AUC_term = ROC_term$AUC[2]))
+#' }
 
