@@ -1114,6 +1114,9 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   int n_store = n_sample / thin; //tested in wrapper function that these numbers 'work'
   int n_iter = n_burnin + n_sample; //tested elsewhere that this 'fits'
 
+  // Rcpp::Rcout << "initialize hyperparameters." << "\n";
+
+
   //INITIALIZE HYPERPARAMETERS
   double alpha1_a = hyper_vec[0];
   double alpha1_b = hyper_vec[1];
@@ -1132,6 +1135,9 @@ void WeibSCRlogitmcmc(const arma::vec &y1, const arma::vec &y_sm,
   //even if a frailty is not ultimately included. Then the indexing doesn't get jammed up.
   double theta_a  = hyper_vec[12];
   double theta_b  = hyper_vec[13];
+
+  // Rcpp::Rcout << "finished hyperparameters except for logistic." << "\n";
+
 
   arma::vec m0 = hyper_vec(arma::span(14,13+pD));
   arma::vec P0diag = hyper_vec(arma::span(14+pD,13+pD+pD));
