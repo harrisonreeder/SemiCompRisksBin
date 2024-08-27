@@ -1,0 +1,39 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# SemiCompRisksBin
+
+The goal of SemiCompRisksBin is to fit Bayesian 'augmented' illness-death models
+that account for the possibility of the terminal event occurring 'immediately' 
+(i.e., within a very short window) after the non-terminal event via a binary indicator 
+and corresponding logistic regression submodel.
+
+## Citation
+
+Reeder HT, Lee KH, Papatheodorou SI, Haneuse S. An augmented illness-death model for semi-competing risks with clinically immediate terminal events. Statistics in Medicine. 2024; 43(21): 4194-4211. doi: [10.1002/sim.10181](https://doi.org/10.1002/sim.10181)
+
+## Installation
+
+You can install the development version of SemiCompRisksBin from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("harrisonreeder/SemiCompRisksBin")
+```
+
+## Example
+
+A complete worked example is provided in a script located in the demo/ folder.
+
